@@ -1,0 +1,266 @@
+import os
+import time
+import osmnx as ox
+
+# =========================================================
+# CONFIGURACIÓN
+# =========================================================
+
+ox.settings.use_cache = True
+ox.settings.timeout = 300
+
+# =========================================================
+# DISTRITOS DE LIMA NORTE
+# =========================================================
+
+lima_norte = {
+    "Ancón": "ancon",
+    "Carabayllo": "carabayllo",
+    "Comas": "comas",
+    "Independencia": "independencia",
+    "Los Olivos": "los_olivos",
+    "Puente Piedra": "puente_piedra",
+    "San Martín de Porres": "smp",
+    "Santa Rosa": "santa_rosa"
+}
+
+# =========================================================
+# CREAR CARPETAS
+# =========================================================
+
+os.makedirs("output/red_vial", exist_ok=True)
+os.makedirs("output/salud", exist_ok=True)
+os.makedirs("output/educacion", exist_ok=True)
+os.makedirs("output/comercio", exist_ok=True)
+
+# =========================================================
+# TAGS
+# =========================================================
+
+tags_calles = {
+    'highway': [
+        'motorway',
+        'trunk',
+        'primary',
+        'secondary',
+        'tertiary',
+        'residential',
+        'unclassified'
+    ]
+}
+
+# -------- SALUD --------
+
+tags_salud = {
+    'amenity': [
+        'hospital',
+        'clinic',
+        'doctors',
+        'dentist',
+        'pharmacy',
+        'veterinary',
+        'nursing_home',
+        'social_facility',
+        'laboratory'
+    ],
+    'healthcare': [
+        'hospital',
+        'clinic',
+        'doctor',
+        'dentist',
+        'pharmacy',
+        'laboratory',
+        'rehabilitation',
+        'nurse',
+        'midwife',
+        'health_centre',
+        'vaccination_centre'
+    ],
+    'building': [
+        'hospital',
+        'clinic'
+    ]
+}
+
+# -------- EDUCACIÓN --------
+
+tags_educacion = {
+    'amenity': [
+        'school',
+        'university',
+        'college',
+        'kindergarten',
+        'library',
+        'language_school',
+        'music_school',
+        'driving_school',
+        'training',
+        'research_institute',
+        'childcare',
+        'dancing_school'
+    ],
+    'building': [
+        'school',
+        'university',
+        'college',
+        'kindergarten'
+    ],
+    'office': [
+        'educational_institution'
+    ]
+}
+
+# -------- COMERCIO --------
+
+tags_comercio = {
+    'shop': True,
+    'amenity': [
+        'marketplace',
+        'market',
+        'restaurant',
+        'cafe',
+        'fast_food',
+        'bar',
+        'pub',
+        'food_court',
+        'bank',
+        'atm',
+        'bureau_de_change',
+        'money_transfer'
+    ],
+    'building': [
+        'retail',
+        'commercial',
+        'supermarket',
+        'mall'
+    ],
+    'office': [
+        'company',
+        'coworking'
+    ]
+}
+
+# =========================================================
+# PROCESAMIENTO
+# =========================================================
+
+for distrito, slug in lima_norte.items():
+
+    try:
+
+        place_name = f"{distrito}, Lima, Peru"
+
+        print("\n" + "=" * 60)
+        print(f"Procesando: {place_name}")
+        print("=" * 60)
+
+        # =================================================
+        # RED VIAL
+        # =================================================
+
+        print("Descargando red vial...")
+
+        calles = ox.features_from_place(
+            place_name,
+            tags=tags_calles
+        )
+
+        calles = calles[
+            calles.geometry.notna()
+        ].copy()
+
+        if 'highway' in calles.columns:
+
+            red_vial = calles[
+                calles['highway'].isin(tags_calles['highway'])
+            ].copy()
+
+            ruta_red = f"output/red_vial/red_vial_{slug}.geojson"
+
+            red_vial.to_file(
+                ruta_red,
+                driver='GeoJSON'
+            )
+
+            print(f"Red vial: {len(red_vial)} segmentos")
+
+        # =================================================
+        # SALUD
+        # =================================================
+
+        print("Descargando salud...")
+
+        salud = ox.features_from_place(
+            place_name,
+            tags=tags_salud
+        )
+
+        salud = salud[
+            salud.geometry.notna()
+        ].copy()
+
+        ruta_salud = f"output/salud/salud_{slug}.geojson"
+
+        salud.to_file(
+            ruta_salud,
+            driver='GeoJSON'
+        )
+
+        print(f"Salud: {len(salud)} elementos")
+
+        # =================================================
+        # EDUCACIÓN
+        # =================================================
+
+        print("Descargando educación...")
+
+        educacion = ox.features_from_place(
+            place_name,
+            tags=tags_educacion
+        )
+
+        educacion = educacion[
+            educacion.geometry.notna()
+        ].copy()
+
+        ruta_edu = f"output/educacion/educacion_{slug}.geojson"
+
+        educacion.to_file(
+            ruta_edu,
+            driver='GeoJSON'
+        )
+
+        print(f"Educación: {len(educacion)} elementos")
+
+        # =================================================
+        # COMERCIO
+        # =================================================
+
+        print("Descargando comercio...")
+
+        comercio = ox.features_from_place(
+            place_name,
+            tags=tags_comercio
+        )
+
+        comercio = comercio[
+            comercio.geometry.notna()
+        ].copy()
+
+        ruta_com = f"output/comercio/comercio_{slug}.geojson"
+
+        comercio.to_file(
+            ruta_com,
+            driver='GeoJSON'
+        )
+
+        print(f"Comercio: {len(comercio)} elementos")
+
+        # Evitar saturar Overpass
+        time.sleep(2)
+
+    except Exception as e:
+
+        print(f"Error en {distrito}: {e}")
+
+print("\nPROCESO FINALIZADO")
