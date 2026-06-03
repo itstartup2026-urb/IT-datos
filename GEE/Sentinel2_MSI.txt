@@ -1,0 +1,188 @@
+// Multi-Spectral Index Calculator Using Sentinel-2A Imagery in Google Earth Engine
+// Compute: BSI, NDBI, Urban Index, Road Detection Index, NDVI, NDWI, SAVI
+// Mosaico anual basado en MEDIANA para Lima Norte (2017)
+
+// Lima Norte
+var roi = ee.FeatureCollection("projects/mystic-centaur-451219-m0/assets/CDC_Distrito_LimaNorte");
+          
+Map.addLayer(roi, {}, 'Lima Norte Area', false);
+Map.centerObject(roi, 12);
+
+//Función para enmascarar nubes densas en Sentinel-2
+function maskS2Clouds(image) {
+  var qa = image.select('QA60');
+  
+  // Bit 10 representa nubes densas
+  var cloudBitMask = 1 << 10;
+  
+  var mask = qa.bitwiseAnd(cloudBitMask).eq(0);
+  
+  return image.updateMask(mask)
+              .divide(10000)  // Escalar reflectancia a 0-1
+              .copyProperties(image, ['system:time_start']);
+}
+
+// Importar Colección Sentinel-2A y filtrar por año y zona
+var sentinel2 = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+  .filterBounds(roi) 
+  .filterDate('2017-01-01', '2017-12-31')
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 30))
+  .map(maskS2Clouds);
+
+print('Sentinel-2 Collection (Imágenes disponibles en 2017):', sentinel2);
+
+// Reducción por MEDIANA
+var image = sentinel2.median();
+print('Mosaico compuesto por mediana generado con éxito.');
+
+// Calcular todos los índices espectrales utilizando el mosaico limpio
+
+// NDVI - Normalized Difference Vegetation Index
+var ndvi = image.normalizedDifference(['B8', 'B4']).rename('NDVI');
+
+// SAVI - Soil Adjusted Vegetation Index
+var savi = image.expression(
+  '((NIR - RED) / (NIR + RED + L)) * (1 + L)', {
+    'NIR': image.select('B8'),
+    'RED': image.select('B4'),
+    'L': 0.5
+}).rename('SAVI');
+
+// NDWI - Normalized Difference Water Index
+var ndwi = image.normalizedDifference(['B3', 'B8']).rename('NDWI');
+
+// BSI - Barren Soil Index
+var bsi = image.expression(
+  '((SWIR1 + RED) - (NIR + BLUE)) / ((SWIR1 + RED) + (NIR + BLUE))', {
+    'SWIR1': image.select('B11'),  // SWIR1 band
+    'RED': image.select('B4'),     // Red band
+    'NIR': image.select('B8'),     // NIR band
+    'BLUE': image.select('B2')     // Blue band
+}).rename('BSI');
+
+// NDBI - Normalized Difference Built-up Index
+var ndbi = image.normalizedDifference(['B11', 'B8']).rename('NDBI');
+
+// Urban Index (UI)
+var urbanIndex = image.normalizedDifference(['B12', 'B8']).rename('UI');
+
+// Road Detection Index (RDI)
+var rdi = image.expression(
+  '((RED - GREEN) / (RED + GREEN)) * (1.2 + NIR/10000)', {
+    'RED': image.select('B4'),
+    'GREEN': image.select('B3'),
+    'NIR': image.select('B8')
+}).rename('RDI');
+
+// Añadir todas las capas recortadas al mapa de GEE
+
+// Composición en Color Real
+Map.addLayer(image.clip(roi), { 
+  bands: ['B4', 'B3', 'B2'],
+  min: 0,
+  max: 0.3
+}, 'True Color (RGB) - Mediana 2017');
+
+// Índices de Vegetación
+Map.addLayer(ndvi.clip(roi), { 
+  min: -0.2,
+  max: 0.8,
+  palette: ['brown', 'yellow', 'green']
+}, 'NDVI - Mosaico');
+
+Map.addLayer(savi.clip(roi), { 
+  min: -0.2,
+  max: 0.8,
+  palette: ['brown', 'yellow', 'green']
+}, 'SAVI - Mosaico');
+
+// Índice de Agua
+Map.addLayer(ndwi.clip(roi), { 
+  min: -0.5,
+  max: 0.5,
+  palette: ['red', 'yellow', 'blue']
+}, 'NDWI - Mosaico');
+
+// Índices Urbanos y Suelo Desnudo
+Map.addLayer(bsi.clip(roi), { 
+  min: -0.5,
+  max: 0.5,
+  palette: ['blue', 'yellow', 'brown']
+}, 'BSI - Barren Soil Index');
+
+Map.addLayer(ndbi.clip(roi), { 
+  min: -0.5,
+  max: 0.5,
+  palette: ['blue', 'yellow', 'red']
+}, 'NDBI - Built-up Index');
+
+Map.addLayer(urbanIndex.clip(roi), { 
+  min: -0.5,
+  max: 0.5,
+  palette: ['green', 'yellow', 'red']
+}, 'Urban Index');
+
+Map.addLayer(rdi.clip(roi), { 
+  min: -0.3,
+  max: 0.3,
+  palette: ['blue', 'white', 'red']
+}, 'Road Detection Index');
+
+// Crear una imagen multibanda con todos los índices para exportar
+var allIndices = ee.Image.cat([
+  ndvi, savi, ndwi, bsi, ndbi, urbanIndex, rdi
+]);
+
+// Exportar todos los índices juntos en un solo archivo GeoTIFF multibanda
+Export.image.toDrive({
+  image: allIndices,
+  description: 'Sentinel2_All_Indices_LimaNorte_2017', 
+  folder: 'GEE_Exports',
+  fileNamePrefix: 'S2_All_Indices_LimaNorte_2017',
+  region: roi.geometry(), 
+  scale: 10,
+  maxPixels: 1e13,
+  fileFormat: 'GeoTIFF'
+});
+
+// Exportar cada índice de forma individual
+var indicesList = [
+  {image: ndvi, name: 'NDVI'},
+  {image: savi, name: 'SAVI'},
+  {image: ndwi, name: 'NDWI'},
+  {image: bsi, name: 'BSI'},
+  {image: ndbi, name: 'NDBI'},
+  {image: urbanIndex, name: 'Urban_Index'},
+  {image: rdi, name: 'Road_Detection_Index'}
+];
+
+indicesList.forEach(function(index) {
+  Export.image.toDrive({
+    image: index.image,
+    description: 'Sentinel2_' + index.name + '_LimaNorte_2017', 
+    folder: 'GEE_Exports',
+    fileNamePrefix: 'S2_' + index.name + '_LimaNorte_2017', 
+    region: roi.geometry(), 
+    scale: 10,
+    maxPixels: 1e13,
+    fileFormat: 'GeoTIFF'
+  });
+});
+
+// Imprimir estadísticas promedio del año 2017 para Lima Norte
+print('Index Statistics for ROI (Lima Norte 2017):');
+indicesList.forEach(function(index) {
+  var stats = index.image.reduceRegion({
+    reducer: ee.Reducer.mean().combine({
+      reducer2: ee.Reducer.stdDev(),
+      sharedInputs: true
+    }),
+    geometry: roi.geometry(), 
+    scale: 10,
+    maxPixels: 1e9
+  });
+  print(index.name + ' Annual Statistics:', stats);
+});
+
+// Consola informativa de fórmulas
+print('INDEX FORMULAS AND DESCRIPTIONS PRINTED SUCCESSFULLY.');

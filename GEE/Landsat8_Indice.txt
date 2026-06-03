@@ -1,0 +1,99 @@
+// ==============================================================================
+// --- PIPELINE ROBUSTO: ÍNDICES MULTIESPECTRALES CON LANDSAT 8 (2017) ---
+// --- Región: Lima Norte | Proyecto: Modelado Urbano y Térmico
+// ==============================================================================
+
+// 1. Configuración de la Región de Interés (ROI)
+var roi = ee.FeatureCollection("projects/mystic-centaur-451219-m0/assets/CDC_Distrito_LimaNorte");
+Map.centerObject(roi, 12);
+
+// 2. Función OBLIGATORIA de Factores de Escala del USGS
+function applyScaleFactors(image) {
+  // Desempaqueta la reflectancia óptica de 0 a 1
+  var opticalBands = image.select('SR_B.').multiply(0.0000275).add(-0.2);
+  // Desempaqueta la temperatura de superficie a Kelvin
+  var thermalBands = image.select('ST_B.*').multiply(0.00341802).add(149.0);
+  
+  return image.addBands(opticalBands, null, true)
+              .addBands(thermalBands, null, true);
+}
+
+// 3. Función de Enmascaramiento de Nubes y Sombras (QA_PIXEL)
+function maskL8clouds(image) {
+  var qa = image.select('QA_PIXEL');
+  
+  // Bits de alarmas para nubes y sombras en Landsat 8
+  var dilatedCloudBitMask = (1 << 1);
+  var cirrusBitMask       = (1 << 2);
+  var cloudBitMask        = (1 << 3);
+  var cloudShadowBitMask  = (1 << 4);
+  
+  // Retiene píxeles donde ninguna de estas alarmas está encendida
+  var mask = qa.bitwiseAnd(dilatedCloudBitMask).eq(0)
+    .and(qa.bitwiseAnd(cirrusBitMask).eq(0))
+    .and(qa.bitwiseAnd(cloudBitMask).eq(0))
+    .and(qa.bitwiseAnd(cloudShadowBitMask).eq(0));
+    
+  return image.updateMask(mask).copyProperties(image, ["system:time_start"]);
+}
+
+// 4. Filtrado, Limpieza y Reducción Temporal (Mediana de 2017)
+var collection2017 = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
+  .filterBounds(roi)
+  .filterDate('2024-01-01', '2024-12-31')
+  .filter(ee.Filter.lt('CLOUD_COVER', 99)) // Límite regional
+  .map(maskL8clouds)                       // Perfora nubes píxel por píxel
+  .map(applyScaleFactors);                 // Escala a valores físicos reales
+
+// Colapsa las 45 capturas anuales en un solo mapa continuo
+var composite2017 = collection2017.median().clip(roi);
+
+// 5. Cálculo de los Índices Espectrales
+// Bandas Landsat 8: B3 (Verde), B4 (Rojo), B5 (NIR), B6 (SWIR1)
+
+// A. NDVI (Normalized Difference Vegetation Index) -> (NIR - Rojo) / (NIR + Rojo)
+var ndvi = composite2017.normalizedDifference(['SR_B5', 'SR_B4']).rename('NDVI');
+
+// B. NDWI (Normalized Difference Water Index) -> (Verde - NIR) / (Verde + NIR)
+var ndwi = composite2017.normalizedDifference(['SR_B3', 'SR_B5']).rename('NDWI');
+
+// C. NDBI (Normalized Difference Built-up Index) -> (SWIR1 - NIR) / (SWIR1 + NIR)
+var ndbi = composite2017.normalizedDifference(['SR_B6', 'SR_B5']).rename('NDBI');
+
+// MNDWI: Usamos SWIR1 (SR_B6) en lugar de NIR (SR_B5)
+// Fórmula: (Verde - SWIR1) / (Verde + SWIR1)
+var mndwi = composite2017.normalizedDifference(['SR_B3', 'SR_B6']).rename('MNDWI');
+
+// 6. Visualización de los Resultados
+Map.layers().reset();
+
+// Contorno de Lima Norte
+Map.addLayer(roi.style({color: 'black', fillColor: '00000000', width: 2}), {}, 'Límite Lima Norte');
+
+// Paletas de visualización
+var ndviParams = {min: -0.2, max: 0.8, palette: ['blue', 'white', 'green']};
+var ndwiParams = {min: -0.5, max: 0.5, palette: ['red', 'white', 'blue']};
+var ndbiParams = {min: -0.2, max: 0.3, palette: ['blue', 'white', 'orange', 'red']};
+var mndwiParams = {min: -0.5, max: 0.5, palette: ['red', 'white', 'blue']};
+
+// Agregamos las capas. 
+// NDWI y NDVI están apagadas (false) por defecto para que la carga inicial muestre la edificación.
+Map.addLayer(ndvi, ndviParams, '1. NDVI 2017 (Vegetación)', false);
+Map.addLayer(ndwi, ndwiParams, '2. NDWI 2017 (Humedad/Agua)', false);
+Map.addLayer(ndbi, ndbiParams, '3. NDBI 2017 (Construcción/Asfalto)');
+Map.addLayer(mndwi, ndbiParams, '4. MNDWI 2017 Agua_turbia');
+
+// ==============================================================================
+// --- EXPORTACIÓN AUTOMATIZADA ---
+// ==============================================================================
+// Exportar NDBI a Google Drive para integrarlo a otros análisis
+Export.image.toDrive({
+  image: ndbi.toFloat(),
+  description: 'NDBI_LimaNorte_L8_2017',
+  folder: 'Proyecto_Crecimiento_Urbano',
+  fileNamePrefix: 'NDBI_LN_L8_2017',
+  scale: 30, // Resolución nativa óptica y térmica de Landsat 8
+  region: roi.geometry(),
+  fileFormat: 'GeoTIFF',
+  maxPixels: 1e13
+});
