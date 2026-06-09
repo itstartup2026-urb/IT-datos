@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulador Urbano — Lima Norte</title>
+<script src="https://unpkg.com/deck.gl@8.9.0/dist.min.js"></script>
+<script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0e1a;
+    color: #e8eaf0;
+    font-family: 'DM Sans', sans-serif;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  #map {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+  }
+
+  /* Panel superior */
+  .header {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: 18px 28px;
+    background: linear-gradient(180deg, rgba(10,14,26,0.95) 0%, transparent 100%);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 10;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .brand-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #ff3d6b;
+    box-shadow: 0 0 12px #ff3d6b;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(1.3); }
+  }
+
+  .brand-name {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.15em;
+    color: #ff3d6b;
+    text-transform: uppercase;
+  }
+
+  .brand-sub {
+    font-size: 11px;
+    color: rgba(232,234,240,0.4);
+    letter-spacing: 0.08em;
+  }
+
+  .scenario-tabs {
+    display: flex;
+    gap: 4px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 4px;
+  }
+
+  .tab {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    background: transparent;
+    color: rgba(232,234,240,0.5);
+  }
+
+  .tab.active {
+    background: #ff3d6b;
+    color: white;
+    box-shadow: 0 0 16px rgba(255,61,107,0.4);
+  }
+
+  .tab:hover:not(.active) {
+    background: rgba(255,255,255,0.08);
+    color: #e8eaf0;
+  }
+
+  /* Panel de control */
+  .panel {
+    position: absolute;
+    bottom: 32px;
+    left: 28px;
+    width: 320px;
+    background: rgba(10,14,26,0.92);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 24px;
+    z-index: 10;
+    backdrop-filter: blur(20px);
+  }
+
+  .panel-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: rgba(232,234,240,0.35);
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  .slider-group {
+    margin-bottom: 24px;
+  }
+
+  .slider-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .slider-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e8eaf0;
+  }
+
+  .slider-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    color: #ff3d6b;
+    min-width: 36px;
+    text-align: right;
+  }
+
+  input[type="range"] {
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.1);
+    outline: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: #ff3d6b;
+    box-shadow: 0 0 10px rgba(255,61,107,0.6);
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+
+  input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+  }
+
+  input[type="range"].blue::-webkit-slider-thumb {
+    background: #3d9bff;
+    box-shadow: 0 0 10px rgba(61,155,255,0.6);
+  }
+
+  .divider {
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+    margin: 20px 0;
+  }
+
+  /* Stats */
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .stat-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 12px;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    color: rgba(232,234,240,0.35);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .stat-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: #e8eaf0;
+  }
+
+  .stat-value.up { color: #3dff9b; }
+  .stat-value.down { color: #ff3d6b; }
+
+  .stat-delta {
+    font-size: 10px;
+    color: rgba(232,234,240,0.4);
+    margin-top: 2px;
+  }
+
+  /* Info panel derecha */
+  .info-panel {
+    position: absolute;
+    bottom: 32px;
+    right: 28px;
+    width: 260px;
+    z-index: 10;
+  }
+
+  .info-card {
+    background: rgba(10,14,26,0.92);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 16px 18px;
+    backdrop-filter: blur(20px);
+    margin-bottom: 10px;
+  }
+
+  .info-card-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: rgba(232,234,240,0.35);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: rgba(232,234,240,0.7);
+  }
+
+  .legend-bar {
+    width: 24px; height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .tip {
+    font-size: 11px;
+    color: rgba(232,234,240,0.35);
+    line-height: 1.5;
+  }
+
+  .tip span {
+    color: rgba(232,234,240,0.6);
+    font-weight: 600;
+  }
+
+  /* Loading */
+  #loading {
+    position: absolute;
+    inset: 0;
+    background: #0a0e1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    transition: opacity 0.5s;
+  }
+
+  .loading-logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 22px;
+    color: #ff3d6b;
+    letter-spacing: 0.2em;
+    margin-bottom: 8px;
+  }
+
+  .loading-sub {
+    font-size: 12px;
+    color: rgba(232,234,240,0.3);
+    letter-spacing: 0.1em;
+    margin-bottom: 40px;
+  }
+
+  .loading-bar-wrap {
+    width: 240px;
+    height: 2px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .loading-bar {
+    height: 100%;
+    background: #ff3d6b;
+    border-radius: 2px;
+    animation: load 2s ease forwards;
+  }
+
+  @keyframes load {
+    0% { width: 0%; }
+    100% { width: 100%; }
+  }
+
+  .file-prompt {
+    margin-top: 32px;
+    text-align: center;
+  }
+
+  .file-btn {
+    display: inline-block;
+    padding: 12px 28px;
+    background: #ff3d6b;
+    color: white;
+    border-radius: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 0 24px rgba(255,61,107,0.3);
+    transition: all 0.2s;
+  }
+
+  .file-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 32px rgba(255,61,107,0.5);
+  }
+
+  #fileInput { display: none; }
+
+  .file-note {
+    font-size: 11px;
+    color: rgba(232,234,240,0.25);
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="loading-logo">URBASIM</div>
+  <div class="loading-sub">LIMA NORTE — SIMULADOR URBANO 3D</div>
+  <div class="loading-bar-wrap">
+    <div class="loading-bar"></div>
+  </div>
+  <div class="file-prompt">
+    <input type="file" id="fileInput" accept=".geojson,.json">
+    <input type="file" id="terrainInput" accept=".json">
+    <button class="file-btn" onclick="document.getElementById('fileInput').click()">
+      CARGAR CEE_simple.geojson
+    </button>
+    <div class="file-note" style="margin-bottom:12px">Archivo de manzanas (requerido)</div>
+    <button class="file-btn" style="background:rgba(61,155,255,0.8);box-shadow:0 0 24px rgba(61,155,255,0.3)" onclick="document.getElementById('terrainInput').click()">
+      CARGAR terrain.json
+    </button>
+    <div class="file-note">Terreno DEM opcional — cárgalo después de las manzanas</div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<div class="header">
+  <div class="brand">
+    <div class="brand-dot"></div>
+    <div>
+      <div class="brand-name">UrbaS im</div>
+      <div class="brand-sub">Lima Norte · Puente Piedra</div>
+    </div>
+  </div>
+  <div class="scenario-tabs">
+    <button class="tab active" onclick="setScenario('actual')">Actual</button>
+    <button class="tab" onclick="setScenario('densifica')">Densifica</button>
+    <button class="tab" onclick="setScenario('periferia')">Sin política</button>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-title">Control de Escenario</div>
+
+  <div class="slider-group">
+    <div class="slider-label">
+      <span class="slider-name">Coef. Edificabilidad</span>
+      <span class="slider-value" id="val-edif">1.0x</span>
+    </div>
+    <input type="range" id="slider-edif" min="10" max="40" value="10"
+      oninput="updateEdif(this.value)">
+  </div>
+
+  <div class="slider-group">
+    <div class="slider-label">
+      <span class="slider-name">Expansión Periferia</span>
+      <span class="slider-value blue" id="val-periferia">1.0x</span>
+    </div>
+    <input type="range" class="blue" id="slider-peri" min="10" max="30" value="10"
+      oninput="updatePeri(this.value)">
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-label">Pisos promedio</div>
+      <div class="stat-value up" id="stat-pisos">—</div>
+      <div class="stat-delta" id="stat-pisos-delta"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Expansión</div>
+      <div class="stat-value down" id="stat-exp">—</div>
+      <div class="stat-delta" id="stat-exp-delta"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Manzanas</div>
+      <div class="stat-value" id="stat-manz">—</div>
+      <div class="stat-delta">total cargadas</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Escenario</div>
+      <div class="stat-value" id="stat-escenario" style="font-size:13px">ACTUAL</div>
+      <div class="stat-delta">activo</div>
+    </div>
+  </div>
+</div>
+
+<div class="info-panel">
+  <div class="info-card">
+    <div class="info-card-title">Altura por pisos</div>
+    <div class="legend-item">
+      <div class="legend-bar" style="background:#1a1a2e"></div>
+      <span>1 piso</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-bar" style="background:#16213e"></div>
+      <span>2–3 pisos</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-bar" style="background:#ff6b35"></div>
+      <span>4–6 pisos</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-bar" style="background:#ff3d6b"></div>
+      <span>7+ pisos</span>
+    </div>
+  </div>
+  <div class="info-card">
+    <div class="tip">
+      <span>Ctrl + arrastrar</span> para inclinar vista 3D<br>
+      <span>Scroll</span> para zoom<br>
+      <span>Clic</span> en manzana para ver datos
+    </div>
+  </div>
+</div>
+
+<script>
+let geojsonData = null;
+let terrainData = null;
+let deckInstance = null;
+let currentScenario = 'actual';
+let edifFactor = 1.0;
+let periFactor = 1.0;
+let baseAvgPisos = 0;
+
+// Zona aproximada de Huamantanga, Puente Piedra
+const HUAMANTANGA_CENTER = [-77.085, -11.865];
+const HUAMANTANGA_RADIUS = 0.015; // grados aprox
+
+function isNearHuamantanga(feature) {
+  const coords = feature.geometry.coordinates;
+  let cx = 0, cy = 0, count = 0;
+  const flat = coords[0] || [];
+  flat.forEach(c => { cx += c[0]; cy += c[1]; count++; });
+  if (count === 0) return false;
+  cx /= count; cy /= count;
+  const dx = cx - HUAMANTANGA_CENTER[0];
+  const dy = cy - HUAMANTANGA_CENTER[1];
+  return Math.sqrt(dx*dx + dy*dy) < HUAMANTANGA_RADIUS;
+}
+
+function getHeight(feature) {
+  const base = parseFloat(feature.properties.MAX_nro_pi) || 1;
+  const isHub = isNearHuamantanga(feature);
+
+  if (currentScenario === 'actual') return base * 3.5;
+  if (currentScenario === 'densifica') {
+    return isHub ? base * edifFactor * 3.5 : base * 3.5 * 0.85;
+  }
+  if (currentScenario === 'periferia') {
+    return isHub ? base * 3.5 * 0.9 : base * periFactor * 3.5;
+  }
+  return base * 3.5;
+}
+
+function getColor(feature) {
+  const pisos = parseFloat(feature.properties.MAX_nro_pi) || 1;
+  const isHub = isNearHuamantanga(feature);
+
+  if (currentScenario === 'densifica' && isHub) {
+    if (pisos * edifFactor >= 7) return [255, 61, 107, 220];
+    if (pisos * edifFactor >= 4) return [255, 107, 53, 200];
+    return [61, 155, 255, 180];
+  }
+  if (currentScenario === 'periferia' && !isHub) {
+    return [255, 61, 107, 180];
+  }
+  if (pisos >= 7) return [255, 61, 107, 200];
+  if (pisos >= 4) return [255, 140, 80, 190];
+  if (pisos >= 2) return [61, 100, 180, 170];
+  return [40, 60, 120, 150];
+}
+
+function updateStats() {
+  if (!geojsonData) return;
+  const features = geojsonData.features;
+  const total = features.length;
+  const avgPisos = features.reduce((s, f) => s + (parseFloat(f.properties.MAX_nro_pi) || 1), 0) / total;
+
+  let displayPisos = avgPisos;
+  let expVal = 1.0;
+
+  if (currentScenario === 'densifica') {
+    displayPisos = avgPisos * (1 + (edifFactor - 1) * 0.3);
+    expVal = Math.max(0.5, 1 - (edifFactor - 1) * 0.15);
+  } else if (currentScenario === 'periferia') {
+    expVal = periFactor;
+  }
+
+  document.getElementById('stat-pisos').textContent = displayPisos.toFixed(1);
+  document.getElementById('stat-exp').textContent = expVal.toFixed(1) + 'x';
+  document.getElementById('stat-manz').textContent = total.toLocaleString();
+
+  const names = { actual: 'ACTUAL', densifica: 'DENSIF.', periferia: 'S/POLÍT.' };
+  document.getElementById('stat-escenario').textContent = names[currentScenario];
+
+  if (baseAvgPisos > 0) {
+    const delta = ((displayPisos - baseAvgPisos) / baseAvgPisos * 100).toFixed(0);
+    document.getElementById('stat-pisos-delta').textContent = delta > 0 ? `+${delta}% vs actual` : `${delta}% vs actual`;
+  }
+}
+
+function renderMap() {
+  if (!geojsonData || !deckInstance) return;
+
+  const layers = [];
+
+  // Capa de terreno DEM en gris
+  if (terrainData && terrainData.points) {
+    const minElev = Math.min(...terrainData.points.map(p => p[2]));
+    const maxElev = Math.max(...terrainData.points.map(p => p[2]));
+    const range = maxElev - minElev || 1;
+
+    const terrainLayer = new deck.ColumnLayer({
+      id: 'terrain',
+      data: terrainData.points,
+      getPosition: d => [d[0], d[1]],
+      getElevation: d => ((d[2] - minElev) / range) * 300,
+      getColor: d => {
+        const t = (d[2] - minElev) / range;
+        const v = Math.floor(160 + t * 95);
+        return [v, v, v, 200];
+      },
+      radius: 15,
+      elevationScale: 1,
+      extruded: true,
+      pickable: false,
+      updateTriggers: { getElevation: [], getColor: [] }
+    });
+    layers.push(terrainLayer);
+  }
+
+  // Capa de manzanas
+  const manzanasLayer = new deck.GeoJsonLayer({
+    id: 'manzanas',
+    data: geojsonData,
+    extruded: true,
+    wireframe: false,
+    getElevation: f => { const base = ((parseFloat(f.properties.elev_base || 0) - 1) / 2713) * 300; return base + getHeight(f); },
+    getFillColor: f => getColor(f),
+    getLineColor: [255, 255, 255, 20],
+    lineWidthMinPixels: 0.5,
+    elevationScale: 1,
+    pickable: true,
+    updateTriggers: {
+      getElevation: [currentScenario, edifFactor, periFactor],
+      getFillColor: [currentScenario, edifFactor, periFactor]
+    },
+    transitions: {
+      getElevation: { duration: 600, easing: t => t < 0.5 ? 2*t*t : -1+(4-2*t)*t },
+      getFillColor: { duration: 400 }
+    },
+    onClick: info => {
+      if (info.object) {
+        const p = info.object.properties;
+        alert(`Manzana\nPisos: ${p.MAX_nro_pi || '—'}\nCEE: ${parseFloat(p.CEE || 0).toFixed(2)}`);
+      }
+    }
+  });
+  layers.push(manzanasLayer);
+
+  deckInstance.setProps({ layers });
+  updateStats();
+}
+
+function setScenario(name) {
+  currentScenario = name;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  renderMap();
+}
+
+function updateEdif(val) {
+  edifFactor = val / 10;
+  document.getElementById('val-edif').textContent = edifFactor.toFixed(1) + 'x';
+  renderMap();
+}
+
+function updatePeri(val) {
+  periFactor = val / 10;
+  document.getElementById('val-periferia').textContent = periFactor.toFixed(1) + 'x';
+  renderMap();
+}
+
+function initDeck(geojson) {
+  geojsonData = geojson;
+
+  // Calcular centro del dataset
+  const coords = geojson.features.slice(0, 100).map(f => {
+    const c = f.geometry.coordinates[0][0];
+    return c;
+  }).filter(Boolean);
+
+  const avgLng = coords.reduce((s, c) => s + c[0], 0) / coords.length;
+  const avgLat = coords.reduce((s, c) => s + c[1], 0) / coords.length;
+
+  baseAvgPisos = geojson.features.reduce((s, f) => s + (parseFloat(f.properties.MAX_nro_pi) || 1), 0) / geojson.features.length;
+
+  deckInstance = new deck.DeckGL({
+    container: 'map',
+    mapStyle: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    initialViewState: {
+      longitude: avgLng || -77.085,
+      latitude: avgLat || -11.865,
+      zoom: 13,
+      pitch: 55,
+      bearing: -20
+    },
+    controller: true,
+    layers: []
+  });
+
+  renderMap();
+
+  document.getElementById('loading').style.opacity = '0';
+  setTimeout(() => document.getElementById('loading').style.display = 'none', 500);
+}
+
+function loadFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const text = ev.target.result;
+      const data = JSON.parse(text);
+      if (!data.features || data.features.length === 0) {
+        alert('El archivo no tiene features. Verifica que sea un GeoJSON de polígonos.');
+        return;
+      }
+      initDeck(data);
+    } catch(err) {
+      alert('Error: ' + err.message + '\n\nVerifica que el archivo sea un GeoJSON válido.');
+    }
+  };
+  reader.onerror = function() {
+    alert('No se pudo leer el archivo.');
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+document.getElementById('fileInput').addEventListener('change', function(e) {
+  loadFile(e.target.files[0]);
+});
+
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  loadFile(e.dataTransfer.files[0]);
+});
+
+document.getElementById('terrainInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      terrainData = JSON.parse(ev.target.result);
+      renderMap();
+    } catch(err) {
+      alert('Error al leer terrain.json: ' + err.message);
+    }
+  };
+  reader.readAsText(file, 'utf-8');
+});
+</script>
+</body>
+</html>
