@@ -45,6 +45,9 @@ var palette = [
 
 Map.addLayer(label, {min: 0, max: 8, palette: palette}, 'DW Lima Norte');
 
+// Validación
+print('Número de imágenes DW:', dw.size());
+
 // ================================
 // 6. EXPORTAR
 // ================================
