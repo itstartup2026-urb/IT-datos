@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Simulador de Cabida LRTZ</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #000;
+      color: #fff;
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      padding: 20px;
+      height: 100vh;
+      overflow: hidden;
+    }
+    h1 { font-size: 17px; font-weight: 600; margin-bottom: 4px; color: #fff; }
+    .subtitulo { font-size: 11px; color: #555; margin-bottom: 12px; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 270px 1fr;
+      gap: 14px;
+      height: calc(100vh - 68px);
+    }
+
+    .col-izq { overflow-y: auto; padding-right: 4px; }
+    .col-izq::-webkit-scrollbar { width: 3px; }
+    .col-izq::-webkit-scrollbar-thumb { background: #222; border-radius: 2px; }
+
+    .col-der {
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 10px;
+      overflow: hidden;
+    }
+
+    .panel {
+      background: #0a0a0a;
+      border: 1px solid #1e1e1e;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .panel-titulo {
+      font-size: 10px; font-weight: 600; color: #ff2d9b;
+      letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px;
+    }
+
+    .fila-inputs { display: grid; gap: 8px; margin-bottom: 8px; }
+    .fila-2 { grid-template-columns: 1fr 1fr; }
+    .fila-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .fila-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+    label { display: block; font-size: 10px; color: #555; margin-bottom: 3px; }
+
+    input[type="number"] {
+      width: 100%;
+      background: #000;
+      border: 1px solid #222;
+      border-radius: 5px;
+      color: #fff;
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      padding: 5px 8px;
+      outline: none;
+    }
+    input[type="number"]:focus { border-color: #ff2d9b; }
+    input[type="number"][readonly] { color: #ff2d9b; cursor: not-allowed; }
+
+    input[type="range"] { width: 100%; accent-color: #ff2d9b; }
+    .slider-fila { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+    .slider-val { font-size: 12px; font-weight: 500; min-width: 36px; text-align: right; color: #fff; }
+
+    .alerta {
+      display: none;
+      background: #1a0000;
+      border: 1px solid #8a8a8a;
+      border-radius: 6px;
+      padding: 7px 12px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #8a8a8a;
+    }
+
+    .metricas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .metrica {
+      background: #0a0a0a;
+      border: 1px solid #1e1e1e;
+      border-radius: 8px;
+      padding: 8px 12px;
+    }
+    .metrica-label { font-size: 10px; color: #555; margin-bottom: 3px; }
+    .metrica-valor { font-size: 22px; font-weight: 500; line-height: 1; color: #fff; }
+    .metrica-sub { font-size: 10px; color: #444; margin-top: 2px; }
+
+    .barra-wrap {
+      background: #0a0a0a;
+      border: 1px solid #1e1e1e;
+      border-radius: 8px;
+      padding: 8px 14px;
+    }
+    .barra-fila { display: flex; justify-content: space-between; align-items: center; }
+    .barra-fila span { font-size: 11px; color: #555; }
+    .barra-fila span:last-child { color: #fff; font-weight: 500; }
+    .barra-track { height: 5px; background: #111; border-radius: 3px; overflow: hidden; margin-top: 8px; }
+    .barra-fill { height: 100%; border-radius: 3px; background: #ff2d9b; transition: width 0.3s, background 0.3s; }
+
+    .equilibrio {
+      border-radius: 5px; padding: 5px 10px; font-size: 11px;
+      font-weight: 500; text-align: center; margin-top: 8px;
+    }
+    .ok  { background: #001a00; color: #3fb950; border: 1px solid #1a3a1a; }
+    .mal { background: #1a0000; color: #8a8a8a; border: 1px solid #3a1a1a; }
+
+    #visor3d {
+      width: 100%; height: 100%; min-height: 260px;
+      border-radius: 8px;
+      border: 1px solid #1e1e1e;
+      background: #000;
+    }
+
+    .leyenda {
+      display: flex; gap: 14px; flex-wrap: wrap;
+      padding: 6px 12px;
+      background: #0a0a0a;
+      border: 1px solid #1e1e1e;
+      border-radius: 8px;
+    }
+    .leyenda-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #555; }
+    .leyenda-color { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+
+    .soporte {
+      background: #0a0a0a;
+      border: 1px solid #1e1e1e;
+      border-radius: 8px;
+      padding: 10px 14px;
+    }
+
+    .usos-tabla { display: flex; flex-direction: column; gap: 4px; max-height: 160px; overflow-y: auto; }
+    .usos-tabla::-webkit-scrollbar { width: 3px; }
+    .usos-tabla::-webkit-scrollbar-thumb { background: #222; border-radius: 2px; }
+
+    .uso-fila { display: grid; grid-template-columns: 36px 1fr; align-items: center; gap: 8px; }
+    .uso-lbl { font-size: 11px; color: #555; text-align: right; }
+
+    select.uso-sel {
+      background: #000;
+      border: 1px solid #222;
+      border-radius: 5px;
+      color: #fff;
+      font-family: 'Fira Code', monospace;
+      font-size: 11px;
+      padding: 3px 6px;
+      outline: none;
+      width: 100%;
+    }
+    select.uso-sel:focus { border-color: #ff2d9b; }
+    select.uso-sel.res { border-left: 3px solid #f4c430; }
+    select.uso-sel.com { border-left: 3px solid #e63946; }
+    select.uso-sel.equ { border-left: 3px solid #e3b341; }
+
+    /* separador visual dentro del panel */
+    .separador {
+      border: none;
+      border-top: 1px solid #1e1e1e;
+      margin: 8px 0;
+    }
+    .sublabel {
+      font-size: 10px; color: #ff2d9b; margin-bottom: 6px; margin-top: 4px;
+      letter-spacing: 0.05em;
+    }
+  </style>
+</head>
+<body>
+
+<div id="banner-manzana" style="display:none;align-items:center;gap:16px;background:#0a0a0a;border:1px solid #ff2d9b;border-radius:8px;padding:8px 16px;margin-bottom:12px;font-size:11px;">
+  <span style="color:#ff2d9b;font-weight:600;letter-spacing:0.1em">📍 MANZANA DESDE URBASIM</span>
+  <span style="color:#555">ID: <span id="banner-id" style="color:#fff">—</span></span>
+  <span style="color:#555">Pisos: <span id="banner-pisos" style="color:#fff">—</span></span>
+  <span style="color:#555">CEE: <span id="banner-cee" style="color:#fff">—</span></span>
+  <span style="color:#555">CEN: <span id="banner-cen" style="color:#fff">—</span></span>
+  <span id="pisos-lock" style="background:rgba(255,45,155,0.15);border:1px solid rgba(255,45,155,0.4);color:#ff2d9b;padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer;" onclick="liberarPisosOverride()" title="Clic para calcular pisos desde normativa">🔒 PISOS REALES — clic para liberar</span>
+  <button onclick="manzanaReal=null;pisosOverride=null;document.getElementById('banner-manzana').style.display='none';calcular()" style="margin-left:auto;background:transparent;border:1px solid #333;color:#555;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:10px">✕ limpiar</button>
+</div>
+<h1>SIMULADOR DE CABIDA LRTZ</h1>
+<p class="subtitulo">Parámetros urbanísticos con visualización 3D. Esto no es predictibilidad, solo un sencillo visualizador C:</p>
+
+<div class="layout">
+
+  <!-- IZQUIERDA -->
+  <div class="col-izq">
+
+    <div class="panel">
+      <p class="panel-titulo">1. Parámetros base</p>
+      <div class="fila-inputs fila-2">
+        <div>
+          <label>Frente del lote (m)</label>
+          <input type="number" id="frente" value="10" oninput="calcular()">
+        </div>
+        <div>
+          <label>Fondo del lote (m)</label>
+          <input type="number" id="fondo" value="20" oninput="calcular()">
+        </div>
+      </div>
+      <div style="margin-bottom:8px;">
+        <label>Área terreno (calculada)</label>
+        <input type="number" id="area" readonly>
+      </div>
+      <div style="margin-bottom:8px;">
+        <label>Coef. edificabilidad</label>
+        <input type="number" id="ce" value="10" step="0.5" oninput="calcular()">
+      </div>
+    </div>
+
+    <div class="panel">
+      <p class="panel-titulo">2. Vía, retiros y área libre</p>
+
+      <p class="sublabel">— altura normativa</p>
+      <div class="fila-inputs fila-3" style="margin-bottom:10px;">
+        <div>
+          <label>Ancho vía (m)</label>
+          <input type="number" id="via" value="25" oninput="calcular()">
+        </div>
+        <div>
+          <label>Factor</label>
+          <input type="number" id="factor" value="1.5" step="0.1" oninput="calcular()">
+        </div>
+        <div>
+          <label>H por piso (m)</label>
+          <input type="number" id="hPiso" value="3" step="0.5" oninput="calcular()">
+        </div>
+      </div>
+
+      <hr class="separador">
+      <p class="sublabel">— retiros (m)</p>
+      <div class="fila-inputs fila-4" style="margin-bottom:10px;">
+        <div>
+          <label>Frontal</label>
+          <input type="number" id="retiroFrontal" value="3" step="0.5" oninput="calcular()">
+        </div>
+        <div>
+          <label>Posterior</label>
+          <input type="number" id="retiroPosterior" value="2" step="0.5" oninput="calcular()">
+        </div>
+        <div>
+          <label>Lat. izq.</label>
+          <input type="number" id="retiroLatIzq" value="0" step="0.5" oninput="calcular()">
+        </div>
+        <div>
+          <label>Lat. der.</label>
+          <input type="number" id="retiroLatDer" value="0" step="0.5" oninput="calcular()">
+        </div>
+      </div>
+
+      <hr class="separador">
+      <p class="sublabel">— patio interior (%)</p>
+      <div class="slider-fila">
+        <input type="range" min="0" max="40" value="10" step="5" id="patioPct"
+          oninput="document.getElementById('patioPctVal').textContent=this.value+'%'; calcular()">
+        <span class="slider-val" id="patioPctVal">10%</span>
+      </div>
+      <p style="font-size:10px; color:#333; margin-top:4px;">área libre interior adicional (sobre la huella)</p>
+    </div>
+
+    <div class="panel">
+      <p class="panel-titulo">3. Uso por piso</p>
+      <div class="usos-tabla" id="usosPisos"></div>
+    </div>
+
+    <div class="panel">
+      <p class="panel-titulo">4. Soporte urbano</p>
+      <div class="fila-inputs fila-2">
+        <div>
+          <label>Ratio DOT (m²/hab)</label>
+          <input type="number" id="ratio" value="4" step="0.5" oninput="calcular()">
+        </div>
+        <div>
+          <label>Servicios exist. (m²)</label>
+          <input type="number" id="servExist" value="1900" step="100" oninput="calcular()">
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- DERECHA -->
+  <div class="col-der">
+
+    <div class="alerta" id="alerta">⚠ <span id="alertaMsg"></span></div>
+
+    <div>
+      <div class="metricas" style="margin-bottom:8px;">
+        <div class="metrica">
+          <p class="metrica-label">CE consumido</p>
+          <p class="metrica-valor" id="ceConsumido">—</p>
+          <p class="metrica-sub" id="ceLimite">/ — m²</p>
+        </div>
+        <div class="metrica">
+          <p class="metrica-label">Huella edificable</p>
+          <p class="metrica-valor" id="huella">—</p>
+          <p class="metrica-sub">m²</p>
+        </div>
+        <div class="metrica">
+          <p class="metrica-label">Área libre total</p>
+          <p class="metrica-valor" id="areaLibreReal">—</p>
+          <p class="metrica-sub">m² (retiros + patio)</p>
+        </div>
+        <div class="metrica">
+          <p class="metrica-label">Número de pisos</p>
+          <p class="metrica-valor" id="numPisos">—</p>
+          <p class="metrica-sub" id="altTotal">— m total</p>
+        </div>
+      </div>
+      <div class="barra-wrap">
+        <div class="barra-fila">
+          <span>Altura normativa máxima</span>
+          <span id="altNorm">—</span>
+        </div>
+        <div class="barra-fila" style="margin-top:4px;">
+          <span>Altura del proyecto</span>
+          <span id="altProyecto">—</span>
+        </div>
+        <div class="barra-track">
+          <div class="barra-fill" id="altBar" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:8px; overflow:hidden; min-height:0;">
+      <div class="leyenda">
+        <div class="leyenda-item"><div class="leyenda-color" style="background:#f4c430"></div>Residencial</div>
+        <div class="leyenda-item"><div class="leyenda-color" style="background:#e63946"></div>Comercial</div>
+        <div class="leyenda-item"><div class="leyenda-color" style="background:#e3b341"></div>Equipamiento</div>
+        <div class="leyenda-item"><div class="leyenda-color" style="background:#8a8a8a"></div>Azotea</div>
+        <div class="leyenda-item"><div class="leyenda-color" style="background:#ff2d9b; opacity:0.7"></div>Perímetro lote</div>
+        <div class="leyenda-item"><div class="leyenda-color" style="background:#1a3a1a"></div>Retiros / patio</div>
+      </div>
+      <div id="visor3d" style="flex:1;"></div>
+    </div>
+
+    <div class="soporte">
+      <p class="panel-titulo" style="margin-bottom:8px;">Soporte urbano</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+        <div>
+          <p class="metrica-label">Población estimada</p>
+          <p style="font-size:16px;font-weight:500;color:#fff;" id="poblacion">—</p>
+        </div>
+        <div>
+          <p class="metrica-label">Demanda servicios</p>
+          <p style="font-size:16px;font-weight:500;color:#fff;" id="demanda">—</p>
+        </div>
+        <div>
+          <p class="metrica-label">Capacidad total</p>
+          <p style="font-size:16px;font-weight:500;color:#fff;" id="capacidad">—</p>
+        </div>
+      </div>
+      <div class="equilibrio" id="equilibrio">—</div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ─── POLÍGONO REAL DESDE URBASIM ─────────────────────────────────────
+let manzanaReal = null;
+let pisosOverride = null; // pisos reales desde URBASIM — se respetan salvo edición manual
+
+function cargarManzanaDesdeURL() {
+  try {
+    const raw = localStorage.getItem('urbasim_manzana');
+    if (!raw) return;
+    manzanaReal = JSON.parse(raw);
+
+    // Mostrar banner
+    const banner = document.getElementById('banner-manzana');
+    if (banner) {
+      banner.style.display = 'flex';
+      banner.querySelector('#banner-id').textContent = manzanaReal.id || 'Manzana';
+      banner.querySelector('#banner-pisos').textContent = manzanaReal.pisos || '—';
+      banner.querySelector('#banner-cee').textContent = parseFloat(manzanaReal.cee||0).toFixed(2);
+      banner.querySelector('#banner-cen').textContent = parseFloat(manzanaReal.cen||0).toFixed(2);
+    }
+
+    // Pre-cargar parámetros reales de la manzana
+    if (manzanaReal.cen) {
+      document.getElementById('ce').value = parseFloat(manzanaReal.cen).toFixed(1);
+    }
+    if (manzanaReal.area) {
+      const lado = Math.sqrt(manzanaReal.area);
+      document.getElementById('frente').value = Math.round(lado);
+      document.getElementById('fondo').value = Math.round(lado);
+    }
+
+    // Pisos reales: se usan como override hasta que el usuario los modifica manualmente
+    pisosOverride = parseInt(manzanaReal.pisos) || null;
+
+    calcular();
+  } catch(e) {
+    console.warn('No hay manzana desde URBASIM:', e);
+  }
+}
+
+// Función para construir con polígono real
+function construirLoteReal(pisos, hPiso, patioPct, usos) {
+  // pisos viene ya resuelto desde calcular() — no se sobreescribe aquí
+  if (!manzanaReal || !manzanaReal.coords) return false;
+
+  while (edificioGroup.children.length) edificioGroup.remove(edificioGroup.children[0]);
+
+  const coords = manzanaReal.coords; // [[lng,lat], ...]
+
+  // Convertir coordenadas geo a metros locales (centrado en origen)
+  let cx = 0, cy = 0;
+  coords.forEach(c => { cx += c[0]; cy += c[1]; });
+  cx /= coords.length; cy /= coords.length;
+
+  // Factor de conversión aproximado para Lima
+  const mLat = 111000;
+  const mLng = 111000 * Math.cos(cy * Math.PI / 180);
+
+  // pts2D: [x=este-oeste, y=norte-sur] en metros
+  const pts2D = coords.map(c => [
+    (c[0] - cx) * mLng,
+    (c[1] - cy) * mLat
+  ]);
+
+  // Calcular bbox para escala: el polígono entra en ±5 unidades Three.js
+  const xs = pts2D.map(p => p[0]);
+  const ys = pts2D.map(p => p[1]);
+  const maxDim = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  const escala = 10 / Math.max(maxDim, 1);
+
+  // Altura de piso en unidades Three.js (comprimida para que se vea bien)
+  const escalaAltura = Math.min(0.8, 8 / Math.max(pisos, 1));
+  const alto = hPiso * escalaAltura;
+
+  // ── SHAPE del lote completo (plano XZ via rotación) ─────────────
+  // En Three.js Shape vive en XY; rotamos el mesh -PI/2 → queda en plano XZ
+  // pts2D[i][0] = X (este-oeste), pts2D[i][1] = Y del shape → Z del mundo
+  const shapeLote = new THREE.Shape();
+  pts2D.forEach((p, i) => {
+    const x = p[0] * escala;
+    const y = p[1] * escala; // y del shape = z del mundo tras rotación
+    if (i === 0) shapeLote.moveTo(x, y);
+    else shapeLote.lineTo(x, y);
+  });
+  shapeLote.closePath();
+
+  // ── TERRENO ─────────────────────────────────────────────────────
+  const terrenoGeo = new THREE.ShapeGeometry(shapeLote);
+  const terrenoMesh = new THREE.Mesh(
+    terrenoGeo,
+    new THREE.MeshLambertMaterial({ color: 0x111111, side: THREE.DoubleSide })
+  );
+  terrenoMesh.rotation.x = -Math.PI / 2;
+  terrenoMesh.position.y = -0.05;
+  edificioGroup.add(terrenoMesh);
+
+  // ── PERÍMETRO del lote (línea rosa en Y=0) ──────────────────────
+  const perimPts = pts2D.map(p => new THREE.Vector3(p[0]*escala, 0.01, -p[1]*escala));
+  perimPts.push(perimPts[0].clone());
+  const perimGeo = new THREE.BufferGeometry().setFromPoints(perimPts);
+  const perimLine = new THREE.Line(perimGeo, new THREE.LineBasicMaterial({ color: 0xff2d9b }));
+  edificioGroup.add(perimLine);
+
+  // ── INSET por retiros ────────────────────────────────────────────
+  const retFrontal   = parseFloat(document.getElementById('retiroFrontal').value)   || 0;
+  const retPosterior = parseFloat(document.getElementById('retiroPosterior').value)  || 0;
+  const retLatIzq    = parseFloat(document.getElementById('retiroLatIzq').value)     || 0;
+  const retLatDer    = parseFloat(document.getElementById('retiroLatDer').value)     || 0;
+  const insetM = Math.max(retFrontal, retPosterior, retLatIzq, retLatDer, 0);
+  const inset = insetM * escala;
+  const reducPatio = 1 - patioPct * 0.3;
+
+  // Shape del edificio con inset radial desde centroide
+  const shapeEdif = new THREE.Shape();
+  pts2D.forEach((p, i) => {
+    const len = Math.sqrt(p[0]*p[0] + p[1]*p[1]) || 1;
+    const factor = Math.max(0.1, 1 - inset / (len * escala + 0.001)) * reducPatio;
+    const x = p[0] * escala * factor;
+    const y = p[1] * escala * factor;
+    if (i === 0) shapeEdif.moveTo(x, y);
+    else shapeEdif.lineTo(x, y);
+  });
+  shapeEdif.closePath();
+
+  // ── PISOS: ShapeGeometry por piso, rotado a plano XZ, elevado en Y ──
+  // Cada piso es un mesh plano (tapa superior + inferior via DoubleSide) + paredes laterales con ExtrudeGeometry delgada
+  for (let i = 0; i < pisos; i++) {
+    const esAzotea = i === pisos - 1;
+    const uso = usos[i] || 'res';
+    const color = esAzotea ? COLORES.azotea : COLORES[uso];
+    const yBase = i * alto;
+
+    // Volumen del piso: ExtrudeGeometry en plano XY, rotado -PI/2 → sube en Y
+    const extSet = { depth: alto - 0.05, bevelEnabled: false };
+    const pisoGeo = new THREE.ExtrudeGeometry(shapeEdif, extSet);
+    const pisoMesh = new THREE.Mesh(
+      pisoGeo,
+      new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide })
+    );
+    // ExtrudeGeometry extruye en +Z del shape. Tras rotar -PI/2 sobre X:
+    // shape XY → XZ, extrusión +Z → +Y (hacia arriba). Correcto.
+    pisoMesh.rotation.x = -Math.PI / 2;
+    // Pero la forma shape usa Y del shape = p[1]*escala = norte.
+    // En el mundo 3D tras rotación, ese eje apunta en -Z (sur).
+    // Para que coincida con el perímetro (que usa -p[1]*escala como Z),
+    // escalamos Z del grupo: usamos scale.z = -1
+    pisoMesh.scale.z = -1;
+    pisoMesh.position.y = yBase;
+    pisoMesh.castShadow = true;
+    edificioGroup.add(pisoMesh);
+
+    // Línea separadora entre pisos
+    const sepPts = pts2D.map(p => {
+      const len = Math.sqrt(p[0]*p[0] + p[1]*p[1]) || 1;
+      const factor = Math.max(0.1, 1 - inset/(len*escala+0.001)) * reducPatio;
+      return new THREE.Vector3(p[0]*escala*factor, yBase + alto, -p[1]*escala*factor);
+    });
+    sepPts.push(sepPts[0].clone());
+    const sepGeo = new THREE.BufferGeometry().setFromPoints(sepPts);
+    const sepLine = new THREE.Line(sepGeo, new THREE.LineBasicMaterial({ color: 0x000000 }));
+    edificioGroup.add(sepLine);
+  }
+
+  return true;
+}
+</script>
+<script>
+
+// colores sincronizados con la leyenda
+const COLORES = {
+  res: 0xf4c430,   // amarillo residencial
+  com: 0xe63946,   // rojo comercial
+  equ: 0xe3b341,   // naranja equipamiento
+  azotea: 0x8a8a8a // gris azotea
+};
+
+let renderer, scene, camera, edificioGroup;
+let isDragging = false, prevX = 0, prevY = 0;
+let rotY = Math.PI / 4, rotX = 0.45, zoom = 22;
+
+function initThree() {
+  const contenedor = document.getElementById('visor3d');
+  const W = contenedor.clientWidth  || 600;
+  const H = contenedor.clientHeight || 260;
+
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(W, H);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.shadowMap.enabled = true;
+  contenedor.appendChild(renderer.domElement);
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+
+  camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 200);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+  const dl = new THREE.DirectionalLight(0xffffff, 0.8);
+  dl.position.set(10, 20, 10);
+  dl.castShadow = true;
+  scene.add(dl);
+  const dl2 = new THREE.DirectionalLight(0xff88cc, 0.2);
+  dl2.position.set(-10, 5, -10);
+  scene.add(dl2);
+
+  const grid = new THREE.GridHelper(40, 20, 0x1a1a1a, 0x0d0d0d);
+  grid.position.y = 0;
+  scene.add(grid);
+
+  const suelo = new THREE.Mesh(
+    new THREE.PlaneGeometry(40, 40),
+    new THREE.MeshLambertMaterial({ color: 0x050505 })
+  );
+  suelo.rotation.x = -Math.PI / 2;
+  suelo.position.y = -0.01;
+  scene.add(suelo);
+
+  edificioGroup = new THREE.Group();
+  scene.add(edificioGroup);
+
+  updateCamera();
+
+  const cv = renderer.domElement;
+  cv.addEventListener('mousedown', e => { isDragging = true; prevX = e.clientX; prevY = e.clientY; });
+  cv.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    rotY += (e.clientX - prevX) * 0.01;
+    rotX += (e.clientY - prevY) * 0.01;
+    rotX = Math.max(0.05, Math.min(1.3, rotX));
+    prevX = e.clientX; prevY = e.clientY;
+    updateCamera();
+  });
+  cv.addEventListener('mouseup',    () => isDragging = false);
+  cv.addEventListener('mouseleave', () => isDragging = false);
+  cv.addEventListener('wheel', e => {
+    zoom = Math.max(6, Math.min(50, zoom + e.deltaY * 0.04));
+    updateCamera();
+  });
+  cv.addEventListener('touchstart', e => { isDragging = true; prevX = e.touches[0].clientX; prevY = e.touches[0].clientY; });
+  cv.addEventListener('touchmove', e => {
+    if (!isDragging) return;
+    rotY += (e.touches[0].clientX - prevX) * 0.01;
+    rotX += (e.touches[0].clientY - prevY) * 0.01;
+    rotX = Math.max(0.05, Math.min(1.3, rotX));
+    prevX = e.touches[0].clientX; prevY = e.touches[0].clientY;
+    updateCamera();
+  });
+  cv.addEventListener('touchend', () => isDragging = false);
+
+  window.addEventListener('resize', () => {
+    const w = contenedor.clientWidth, h = contenedor.clientHeight;
+    if (w && h) { renderer.setSize(w, h); camera.aspect = w/h; camera.updateProjectionMatrix(); }
+  });
+
+  (function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); })();
+}
+
+function updateCamera() {
+  camera.position.x = zoom * Math.sin(rotY) * Math.cos(rotX);
+  camera.position.y = zoom * Math.sin(rotX);
+  camera.position.z = zoom * Math.cos(rotY) * Math.cos(rotX);
+  camera.lookAt(0, 0, 0);
+}
+
+function construirEdificio(pisos, hPiso, frente, fondo, retFrontal, retPosterior, retLatIzq, retLatDer, patioPct, usos) {
+  // Si hay polígono real desde URBASIM, usarlo
+  if (manzanaReal && manzanaReal.coords) {
+    construirLoteReal(pisos, hPiso, patioPct, usos);
+    return;
+  }
+  while (edificioGroup.children.length) edificioGroup.remove(edificioGroup.children[0]);
+
+  const escala       = 10 / Math.max(frente, fondo);
+  const escalaAltura = Math.min(0.8, 8 / pisos);
+
+  // dimensiones del lote en escala 3D
+  const anchoLote = frente * escala;
+  const profLote  = fondo  * escala;
+
+  // dimensiones edificio = lote - retiros
+  const anchoEdif = Math.max(0.5, (frente - retLatIzq - retLatDer) * escala);
+  const profEdif  = Math.max(0.5, (fondo  - retFrontal - retPosterior) * escala);
+
+  // offset del edificio: centrado en el lote pero desplazado por retiros asimétricos
+  const offsetX = ((retLatDer - retLatIzq) / 2) * escala;
+  const offsetZ = ((retFrontal - retPosterior) / 2) * escala;
+
+  // reducción por patio interior
+  const anchoEdifPatio = anchoEdif * (1 - patioPct * 0.5);
+  const profEdifPatio  = profEdif  * (1 - patioPct * 0.3);
+
+  const alto = hPiso * escalaAltura;
+
+  // ── TERRENO (lote completo) en Y negativo
+  const grosor = 0.15;
+  const terreno = new THREE.Mesh(
+    new THREE.BoxGeometry(anchoLote, grosor, profLote),
+    new THREE.MeshLambertMaterial({ color: 0x111111 })
+  );
+  terreno.position.y = -grosor / 2;
+  terreno.receiveShadow = true;
+  edificioGroup.add(terreno);
+
+  // ── PERÍMETRO DEL LOTE — línea rosa en NTP=0
+  const perimetroGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(anchoLote, 0.01, profLote));
+  const perimetroMat = new THREE.LineBasicMaterial({ color: 0xff2d9b, linewidth: 2 });
+  const perimetro = new THREE.LineSegments(perimetroGeo, perimetroMat);
+  perimetro.position.y = 0.01;
+  edificioGroup.add(perimetro);
+
+  // ── ZONA DE RETIROS (superficie verde oscura en NTP=0)
+  const retirosMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(anchoLote, 0.03, profLote),
+    new THREE.MeshLambertMaterial({ color: 0x0a1f0a, transparent: true, opacity: 0.9 })
+  );
+  retirosMesh.position.y = 0.015;
+  edificioGroup.add(retirosMesh);
+
+  // ── HUELLA EDIFICATORIA (gris claro en NTP=0 sobre los retiros)
+  const huellaMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(anchoEdif, 0.04, profEdif),
+    new THREE.MeshLambertMaterial({ color: 0x222222 })
+  );
+  huellaMesh.position.set(offsetX, 0.03, offsetZ);
+  edificioGroup.add(huellaMesh);
+
+  // ── PISOS — arrancan desde Y=0
+  for (let i = 0; i < pisos; i++) {
+    const esAzotea = i === pisos - 1;
+    const uso = usos[i] || 'res';
+    const color = esAzotea ? COLORES.azotea : COLORES[uso];
+
+    const piso = new THREE.Mesh(
+      new THREE.BoxGeometry(anchoEdifPatio, alto - 0.05, profEdifPatio),
+      new THREE.MeshLambertMaterial({ color })
+    );
+    piso.position.set(offsetX, i * alto + alto / 2, offsetZ);
+    piso.castShadow = true;
+    edificioGroup.add(piso);
+
+    // separador negro entre pisos
+    const sep = new THREE.Mesh(
+      new THREE.BoxGeometry(anchoEdifPatio + 0.04, 0.04, profEdifPatio + 0.04),
+      new THREE.MeshLambertMaterial({ color: 0x000000 })
+    );
+    sep.position.set(offsetX, i * alto, offsetZ);
+    edificioGroup.add(sep);
+
+    // ventanas en fachada frontal (solo residencial, no azotea)
+    if (uso === 'res' && !esAzotea && anchoEdifPatio > 1.5) {
+      const numV = Math.max(1, Math.floor(frente / 3));
+      for (let wx = 0; wx < numV; wx++) {
+        const ox = (wx - (numV - 1) / 2) * (anchoEdifPatio / numV);
+        const v = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, 0.18, 0.04),
+          new THREE.MeshLambertMaterial({ color: 0xfff9c4, transparent: true, opacity: 0.7 })
+        );
+        v.position.set(offsetX + ox, i * alto + alto / 2, offsetZ + profEdifPatio / 2 + 0.03);
+        edificioGroup.add(v);
+      }
+    }
+  }
+
+  // centrar verticalmente
+  const totalAlto = pisos * alto;
+  edificioGroup.position.y = 0;
+}
+
+// ─── TABLA DE USOS ────────────────────────────────────────────
+let ultimosPisos = 0;
+
+function actualizarTablaUsos(pisos) {
+  if (pisos === ultimosPisos) return;
+  ultimosPisos = pisos;
+  const cont = document.getElementById('usosPisos');
+  const prev = {};
+  cont.querySelectorAll('select').forEach(s => { prev[s.dataset.piso] = s.value; });
+  cont.innerHTML = '';
+
+  for (let i = pisos; i >= 1; i--) {
+    const fila = document.createElement('div');
+    fila.className = 'uso-fila';
+
+    const lbl = document.createElement('span');
+    lbl.className = 'uso-lbl';
+    lbl.textContent = i === pisos ? 'AZO' : 'N' + i;
+    if (i === pisos) lbl.style.color = '#8a8a8a';
+
+    const sel = document.createElement('select');
+    sel.className = 'uso-sel';
+    sel.dataset.piso = i;
+
+    if (i === pisos) {
+      // azotea fija
+      const opt = document.createElement('option');
+      opt.value = 'azotea'; opt.textContent = 'Azotea';
+      sel.appendChild(opt);
+      sel.disabled = true;
+      sel.style.color = '#8a8a8a';
+      sel.style.borderLeft = '3px solid #8a8a8a';
+    } else {
+      [['res','Residencial'],['com','Comercial'],['equ','Equipamiento']].forEach(([v,t]) => {
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = t;
+        sel.appendChild(opt);
+      });
+      sel.value = prev[i] || (i <= 2 ? 'com' : 'res');
+      sel.className = 'uso-sel ' + sel.value;
+      sel.addEventListener('change', () => { sel.className = 'uso-sel ' + sel.value; calcular(); });
+    }
+
+    fila.appendChild(lbl);
+    fila.appendChild(sel);
+    cont.appendChild(fila);
+  }
+}
+
+function getUsos(pisos) {
+  const usos = [];
+  for (let i = 1; i <= pisos; i++) {
+    const sel = document.querySelector(`select[data-piso="${i}"]`);
+    usos[i - 1] = sel ? sel.value : 'res';
+  }
+  return usos;
+}
+
+// ─── CÁLCULO ──────────────────────────────────────────────────
+function calcular() {
+  const frente        = parseFloat(document.getElementById('frente').value)         || 0;
+  const fondo         = parseFloat(document.getElementById('fondo').value)          || 0;
+  const area          = frente * fondo;
+  document.getElementById('area').value = area;
+
+  const ce            = parseFloat(document.getElementById('ce').value)             || 0;
+  const via           = parseFloat(document.getElementById('via').value)            || 0;
+  const factor        = parseFloat(document.getElementById('factor').value)         || 1;
+  const hPiso         = parseFloat(document.getElementById('hPiso').value)          || 3;
+  const retFrontal    = parseFloat(document.getElementById('retiroFrontal').value)  || 0;
+  const retPosterior  = parseFloat(document.getElementById('retiroPosterior').value)|| 0;
+  const retLatIzq     = parseFloat(document.getElementById('retiroLatIzq').value)   || 0;
+  const retLatDer     = parseFloat(document.getElementById('retiroLatDer').value)   || 0;
+  const patioPct      = parseFloat(document.getElementById('patioPct').value)       / 100;
+  const ratio         = parseFloat(document.getElementById('ratio').value)          || 4;
+  const servExist     = parseFloat(document.getElementById('servExist').value)      || 0;
+
+  // área de retiros perimetrales
+  const areaRetiros = (retFrontal + retPosterior) * frente
+                    + (retLatIzq + retLatDer) * fondo
+                    - (retFrontal + retPosterior) * (retLatIzq + retLatDer); // descontar esquinas
+
+  // huella edificatoria = lote - retiros
+  const huellaEdif = Math.max(0, area - areaRetiros);
+
+  // área patio interior sobre huella
+  const areaPatioInt = huellaEdif * patioPct;
+
+  // área libre total
+  const areaLibreTotal = areaRetiros + areaPatioInt;
+
+  // área construible por piso
+  const areaPorPiso = Math.max(0, huellaEdif - areaPatioInt);
+
+  // altura normativa usando retiro frontal
+  const altNorm     = (via / 2 + retFrontal) * factor;
+  // Si hay pisos reales desde URBASIM, usarlos; si no, calcular desde normativa
+  const pisos       = pisosOverride !== null
+    ? pisosOverride
+    : Math.max(1, Math.floor(altNorm / hPiso));
+  const ceMax       = area * ce;
+  const ceConsumido = areaPorPiso * pisos;
+  const altProyecto = pisos * hPiso;
+  const poblacion   = Math.round(ceConsumido / (ratio * 10));
+  const demanda     = Math.round(poblacion * ratio);
+  const superavit   = servExist - demanda;
+  const pct         = Math.min(100, Math.round((altProyecto / altNorm) * 100));
+
+  document.getElementById('ceConsumido').textContent   = Math.round(ceConsumido).toLocaleString();
+  document.getElementById('ceLimite').textContent      = '/ ' + Math.round(ceMax).toLocaleString() + ' m²';
+  document.getElementById('huella').textContent        = Math.round(areaPorPiso).toLocaleString();
+  document.getElementById('areaLibreReal').textContent = Math.round(areaLibreTotal).toLocaleString();
+  document.getElementById('numPisos').textContent      = pisos;
+  document.getElementById('altTotal').textContent      = altProyecto.toFixed(1) + ' m total';
+  document.getElementById('altNorm').textContent       = altNorm.toFixed(1) + ' m';
+  document.getElementById('altProyecto').textContent   = altProyecto.toFixed(1) + ' m';
+  document.getElementById('altBar').style.width        = pct + '%';
+  document.getElementById('altBar').style.background   = pct >= 100 ? '#8a8a8a' : '#ff2d9b';
+  document.getElementById('poblacion').textContent     = poblacion.toLocaleString();
+  document.getElementById('demanda').textContent       = Math.round(demanda).toLocaleString() + ' m²';
+  document.getElementById('capacidad').textContent     = Math.round(servExist).toLocaleString() + ' m²';
+
+  const alerta = document.getElementById('alerta');
+  if (ceConsumido > ceMax) {
+    alerta.style.display = 'block';
+    document.getElementById('alertaMsg').textContent = 'Edificabilidad máxima superada (' + Math.round(ceConsumido).toLocaleString() + ' > ' + Math.round(ceMax).toLocaleString() + ' m²)';
+  } else if (altProyecto > altNorm) {
+    alerta.style.display = 'block';
+    document.getElementById('alertaMsg').textContent = 'Altura normativa excedida (' + altProyecto.toFixed(1) + ' m > ' + altNorm.toFixed(1) + ' m)';
+  } else {
+    alerta.style.display = 'none';
+  }
+
+  const eq = document.getElementById('equilibrio');
+  if (superavit >= 0) {
+    eq.className = 'equilibrio ok';
+    eq.textContent = '✓ equilibrio urbano — superávit de ' + Math.round(superavit).toLocaleString() + ' m²';
+  } else {
+    eq.className = 'equilibrio mal';
+    eq.textContent = '✗ déficit de servicios: ' + Math.round(Math.abs(superavit)).toLocaleString() + ' m²';
+  }
+
+  actualizarTablaUsos(pisos);
+  construirEdificio(pisos, hPiso, frente, fondo, retFrontal, retPosterior, retLatIzq, retLatDer, patioPct, getUsos(pisos));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initThree();
+  cargarManzanaDesdeURL();
+  calcular();
+
+  // Si el usuario toca los inputs de altura normativa, libera el override de pisos
+  ['via','factor','hPiso'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => {
+      if (pisosOverride !== null) liberarPisosOverride();
+    });
+  });
+});
+
+function liberarPisosOverride() {
+  pisosOverride = null;
+  const lock = document.getElementById('pisos-lock');
+  if (lock) {
+    lock.style.background = 'rgba(255,255,255,0.05)';
+    lock.style.borderColor = 'rgba(255,255,255,0.15)';
+    lock.style.color = '#555';
+    lock.textContent = '🔓 pisos desde normativa';
+    lock.style.cursor = 'default';
+    lock.onclick = null;
+  }
+  calcular();
+}
+</script>
+</body>
+</html>
