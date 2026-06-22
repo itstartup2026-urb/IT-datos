@@ -23,7 +23,6 @@ var dw = ee.ImageCollection('GOOGLE/DYNAMICWORLD/V1')
 // ================================
 // 4. CLASIFICACIÓN
 // ================================
-// opción robusta para ruido climático
 var label = dw.select('label')
   .mode()
   .clip(region);
