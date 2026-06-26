@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UrbaS im — Lima Norte</title>
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.js"></script>
+<link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.css">
+<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+<script src="https://unpkg.com/echarts@5.4.3/dist/echarts.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0e1a; color: #e8eaf0; font-family: 'DM Sans', sans-serif; overflow: hidden; height: 100vh; }
+#map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+.header { position: absolute; top: 0; left: 0; right: 0; padding: 16px 24px; background: linear-gradient(180deg, rgba(8,12,24,0.98) 0%, transparent 100%); display: flex; align-items: center; justify-content: space-between; z-index: 10; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff3d6b; box-shadow: 0 0 10px #ff3d6b; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.4)} }
+.brand-name { font-family: 'Space Mono', monospace; font-size: 12px; letter-spacing: 0.2em; color: #ff3d6b; }
+.brand-sub { font-size: 10px; color: rgba(232,234,240,0.35); }
+.scenario-tabs { display: flex; gap: 2px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 3px; }
+.tab { padding: 7px 18px; border-radius: 8px; font-size: 11px; font-family: 'Space Mono', monospace; letter-spacing: 0.08em; cursor: pointer; transition: all 0.25s; border: none; background: transparent; color: rgba(232,234,240,0.4); }
+.tab.act { background: #3d9bff; color: white; box-shadow: 0 0 16px rgba(61,155,255,0.4); }
+.tab.pros { background: #3dff9b; color: #0a0e1a; box-shadow: 0 0 16px rgba(61,255,155,0.4); }
+.tab.tend { background: #ff3d6b; color: white; box-shadow: 0 0 16px rgba(255,61,107,0.4); }
+.tab:hover:not(.act):not(.pros):not(.tend) { background: rgba(255,255,255,0.07); color: #e8eaf0; }
+.panel { position: absolute; top: 70px; left: 20px; width: 300px; background: rgba(8,12,24,0.93); border: 1px solid rgba(255,255,255,0.07); border-radius: 16px; padding: 20px; z-index: 10; backdrop-filter: blur(24px); max-height: calc(100vh - 100px); overflow-y: auto; }
+.panel::-webkit-scrollbar { width: 3px; }
+.panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+.sec-title { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: 0.2em; color: rgba(232,234,240,0.3); text-transform: uppercase; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.sc { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 10px 12px; }
+.sl { font-size: 9px; color: rgba(232,234,240,0.3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 3px; }
+.sv { font-family: 'Space Mono', monospace; font-size: 17px; font-weight: 700; }
+.sv.b { color: #3d9bff; } .sv.g { color: #3dff9b; } .sv.r { color: #ff3d6b; }
+.sd { font-size: 9px; color: rgba(232,234,240,0.3); margin-top: 2px; }
+.slider-row { margin-bottom: 16px; }
+.slider-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.slider-name { font-size: 12px; font-weight: 600; color: #e8eaf0; }
+.stag { font-family: 'Space Mono', monospace; font-size: 11px; padding: 2px 8px; border-radius: 4px; background: rgba(61,255,155,0.12); color: #3dff9b; border: 1px solid rgba(61,255,155,0.2); }
+input[type=range] { width: 100%; height: 3px; border-radius: 2px; outline: none; -webkit-appearance: none; cursor: pointer; background: rgba(255,255,255,0.1); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #3dff9b; box-shadow: 0 0 8px rgba(61,255,155,0.5); cursor: pointer; }
+.btn { width: 100%; padding: 9px; border-radius: 8px; font-family: 'Space Mono', monospace; font-size: 10px; cursor: pointer; letter-spacing: 0.08em; transition: all 0.2s; border: none; }
+.btn-draw { background: rgba(61,255,155,0.12); border: 1px solid rgba(61,255,155,0.3); color: #3dff9b; }
+.btn-draw:hover { background: rgba(61,255,155,0.22); }
+.btn-draw.active { background: rgba(61,255,155,0.3); border-color: #3dff9b; }
+.btn-clear { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: rgba(232,234,240,0.4); margin-top: 6px; }
+.draw-hint { font-size: 10px; color: rgba(232,234,240,0.35); line-height: 1.5; padding: 8px; background: rgba(61,255,155,0.05); border-radius: 6px; margin-bottom: 12px; display: none; }
+.legend { display: flex; flex-direction: column; gap: 6px; }
+.li { display: flex; align-items: center; gap: 8px; font-size: 11px; color: rgba(232,234,240,0.6); }
+.ld { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.scenario-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: 0.1em; margin-bottom: 14px; }
+.sb-a { background: rgba(61,155,255,0.12); border: 1px solid rgba(61,155,255,0.25); color: #3d9bff; }
+.sb-p { background: rgba(61,255,155,0.12); border: 1px solid rgba(61,255,155,0.25); color: #3dff9b; }
+.sb-t { background: rgba(255,61,107,0.12); border: 1px solid rgba(255,61,107,0.25); color: #ff3d6b; }
+.sb-dot { width: 6px; height: 6px; border-radius: 50%; }
+.cen-toggle { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; cursor: pointer; margin-top: 8px; }
+.toggle-sw { width: 36px; height: 20px; background: rgba(255,255,255,0.1); border-radius: 10px; position: relative; transition: all 0.2s; }
+.toggle-knob { width: 16px; height: 16px; background: #555; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: all 0.2s; }
+.toggle-sw.on { background: rgba(255,255,255,0.3); }
+.toggle-sw.on .toggle-knob { background: white; left: 18px; }
+.tip-card { background: rgba(8,12,24,0.92); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 14px 16px; backdrop-filter: blur(20px); }
+.tip { font-size: 10px; color: rgba(232,234,240,0.3); line-height: 1.6; }
+.tip span { color: rgba(232,234,240,0.55); font-weight: 600; }
+#chart { width: 100%; height: 150px; }
+#loading { position: absolute; inset: 0; background: #0a0e1a; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; transition: opacity 0.5s; }
+.ll { font-family: 'Space Mono', monospace; font-size: 24px; color: #ff3d6b; letter-spacing: 0.25em; margin-bottom: 6px; }
+.ls { font-size: 11px; color: rgba(232,234,240,0.25); letter-spacing: 0.12em; margin-bottom: 48px; }
+.lb-w { width: 200px; height: 1px; background: rgba(255,255,255,0.06); border-radius: 1px; overflow: hidden; }
+.lb { height: 100%; background: #ff3d6b; animation: load 2s ease forwards; }
+@keyframes load { 0%{width:0%} 100%{width:100%} }
+.fp { margin-top: 36px; text-align: center; }
+.fb { padding: 12px 32px; background: #ff3d6b; color: white; border-radius: 8px; font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: 0.12em; cursor: pointer; border: none; box-shadow: 0 0 28px rgba(255,61,107,0.25); }
+#fi { display: none; }
+.fn { font-size: 10px; color: rgba(232,234,240,0.2); margin-top: 8px; }
+.tend-msg { text-align: center; padding: 16px 8px; }
+.tend-msg .icon { font-size: 28px; margin-bottom: 10px; }
+.tend-msg p { font-size: 11px; color: rgba(232,234,240,0.4); line-height: 1.6; }
+.tend-badge { display: inline-block; margin-top: 12px; padding: 4px 12px; background: rgba(255,61,107,0.12); border: 1px solid rgba(255,61,107,0.25); border-radius: 20px; font-size: 10px; font-family: 'Space Mono', monospace; color: #ff3d6b; }
+.divider { height: 1px; background: rgba(255,255,255,0.05); margin: 16px 0; }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="ll">URBASIM</div>
+  <div class="ls">LIMA NORTE · SIMULADOR URBANO 3D</div>
+  <div class="lb-w"><div class="lb"></div></div>
+  <div class="fp">
+    <input type="file" id="fi" accept=".geojson,.json">
+    <button class="fb" onclick="document.getElementById('fi').click()">CARGAR CEE_dem.geojson</button>
+    <div class="fn">Arrastra tu archivo o haz clic para seleccionar</div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<div class="header">
+  <div class="brand">
+    <div class="brand-dot"></div>
+    <div>
+      <div class="brand-name">URBASIM</div>
+      <div class="brand-sub">Lima Norte · Puente Piedra</div>
+    </div>
+  </div>
+  <div class="scenario-tabs">
+    <button class="tab act" id="tab-a" onclick="setScenario('actual')">ACTUAL</button>
+    <button class="tab" id="tab-p" onclick="setScenario('prospectivo')">PROSPECTIVO</button>
+    <button class="tab" id="tab-t" onclick="setScenario('tendencial')">TENDENCIAL</button>
+  </div>
+</div>
+
+<div class="panel" id="panel">
+
+  <!-- ACTUAL -->
+  <div id="pa">
+    <div class="scenario-badge sb-a"><div class="sb-dot" style="background:#3d9bff"></div>ESTADO ACTUAL</div>
+    <div class="sec-title">Estadísticas</div>
+    <div class="stats">
+      <div class="sc"><div class="sl">Manzanas</div><div class="sv b" id="s-manz">—</div><div class="sd">total</div></div>
+      <div class="sc"><div class="sl">Pisos prom.</div><div class="sv b" id="s-pisos">—</div><div class="sd">promedio</div></div>
+      <div class="sc"><div class="sl">Max pisos</div><div class="sv b" id="s-max">—</div><div class="sd">más alto</div></div>
+      <div class="sc"><div class="sl">CEE prom.</div><div class="sv b" id="s-cee">—</div><div class="sd">coef. edif.</div></div>
+    </div>
+    <div class="sec-title">Distribución por Pisos</div>
+    <div id="chart"></div>
+    <div class="divider"></div>
+    <div class="sec-title">Capas</div>
+    <div class="cen-toggle" onclick="toggleCEN()">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:12px;height:12px;border-radius:2px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.5)"></div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#e8eaf0">CEN</div>
+          <div style="font-size:9px;color:rgba(232,234,240,0.3)">Coef. Edificación Normativo</div>
+        </div>
+      </div>
+      <div class="toggle-sw" id="cen-sw"><div class="toggle-knob" id="cen-k"></div></div>
+    </div>
+    <div class="divider"></div>
+    <div class="sec-title">Leyenda</div>
+    <div class="legend">
+      <div class="li"><div class="ld" style="background:#1a3a5c"></div>1 piso</div>
+      <div class="li"><div class="ld" style="background:#1e5799"></div>2–3 pisos</div>
+      <div class="li"><div class="ld" style="background:#ff8c50"></div>4–6 pisos</div>
+      <div class="li"><div class="ld" style="background:#ff3d6b"></div>7+ pisos</div>
+    </div>
+  </div>
+
+  <!-- PROSPECTIVO -->
+  <div id="pp" style="display:none">
+    <div class="scenario-badge sb-p"><div class="sb-dot" style="background:#3dff9b"></div>ESCENARIO PROSPECTIVO</div>
+    <div class="sec-title">Zona de Intervención</div>
+    <button class="btn btn-draw" id="btn-draw" onclick="startDraw()">✏ DIBUJAR ZONA EN EL MAPA</button>
+    <button class="btn btn-clear" onclick="clearDraw()">✕ LIMPIAR ZONA</button>
+    <div class="draw-hint" id="draw-hint">Haz clic en el mapa para trazar el polígono. Doble clic para cerrar.</div>
+    <div class="divider"></div>
+    <div class="sec-title">Edificabilidad en Zona</div>
+    <div class="slider-row">
+      <div class="slider-top">
+        <span class="slider-name">Factor de nuevo CEN</span>
+        <span class="stag" id="v-edif">1.0x</span>
+      </div>
+      <input type="range" id="sl-edif" min="10" max="50" value="10" oninput="updateEdif(this.value)">
+    </div>
+    <div class="divider"></div>
+    <div class="sec-title">Impacto</div>
+    <div class="stats">
+      <div class="sc"><div class="sl">Manzanas</div><div class="sv g" id="s-zona">0</div><div class="sd">en zona</div></div>
+      <div class="sc"><div class="sl">Factor</div><div class="sv g" id="s-factor">1.0x</div><div class="sd">edificabilidad</div></div>
+    </div>
+    <div class="divider"></div>
+    <div class="sec-title">Leyenda</div>
+    <div class="legend">
+      <div class="li"><div class="ld" style="background:#1e5799"></div>Sin cambio</div>
+      <div class="li"><div class="ld" style="background:#3d9bff"></div>Densificación moderada</div>
+      <div class="li"><div class="ld" style="background:#3dff9b"></div>Alta densificación</div>
+    </div>
+  </div>
+
+  <!-- TENDENCIAL -->
+  <div id="pt" style="display:none">
+    <div class="scenario-badge sb-t"><div class="sb-dot" style="background:#ff3d6b"></div>ESCENARIO TENDENCIAL</div>
+    <div class="tend-msg">
+      <div class="icon">🔮</div>
+      <p>El modelo predictivo ANN + Markov + Autómatas Celulares está en desarrollo.</p>
+      <p style="margin-top:8px">Mostrará la expansión urbana proyectada al 2030 basada en datos históricos 2017–2025.</p>
+      <div class="tend-badge">EN CONSTRUCCIÓN</div>
+    </div>
+    <div class="divider"></div>
+    <div class="sec-title">Capas previstas</div>
+    <div class="legend">
+      <div class="li"><div class="ld" style="background:#ff3d6b;opacity:0.4"></div>Alta prob. expansión 2030</div>
+      <div class="li"><div class="ld" style="background:#ff8c50;opacity:0.4"></div>Media probabilidad</div>
+      <div class="li"><div class="ld" style="background:#3d9bff;opacity:0.4"></div>Baja probabilidad</div>
+      <div class="li"><div class="ld" style="background:#3dff9b;opacity:0.4"></div>Sin expansión</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- TIP -->
+<div style="position:absolute;bottom:28px;right:20px;z-index:10">
+  <div class="tip-card">
+    <div class="tip">
+      <span>Ctrl + arrastrar</span> inclinar 3D<br>
+      <span>Scroll</span> zoom<br>
+      <span>Clic</span> ver datos manzana
+    </div>
+  </div>
+</div>
+
+<script>
+mapboxgl.accessToken = 'pk.eyJ1IjoibGFkeXJvc2F0ejMwIiwiYSI6ImNtcTh5endsMzAyc2Qyc3E1eDhzNTVzZG8ifQ.LwABSO9B7XlStWlzSFHtmA';
+
+let map, geojsonData, draw, chart;
+let clickedFeature = null;
+
+function abrirCabida() {
+  if (!clickedFeature) return;
+  const f = clickedFeature;
+  const coords = f.geometry.type === 'MultiPolygon'
+    ? f.geometry.coordinates[0][0]
+    : f.geometry.coordinates[0];
+
+  // Calcular área aproximada del polígono (Shoelace formula)
+  let area = 0;
+  const mLat = 111000;
+  const mLng = 111000 * Math.cos(coords[0][1] * Math.PI / 180);
+  for (let i = 0; i < coords.length - 1; i++) {
+    area += (coords[i][0] * mLng) * (coords[i+1][1] * mLat);
+    area -= (coords[i+1][0] * mLng) * (coords[i][1] * mLat);
+  }
+  area = Math.abs(area) / 2;
+
+  const manzana = {
+    id: f.properties.id || f.properties.OBJECTID || 'Manzana',
+    pisos: f.properties.MAX_nro_pi || 1,
+    cee: f.properties.Cee || 0,
+    cen: f.properties.Cen || 0,
+    area: Math.round(area),
+    coords: coords
+  };
+
+  localStorage.setItem('urbasim_manzana', JSON.stringify(manzana));
+  window.open('simulador_cabida_v3.html', '_blank');
+}
+let scenario = 'actual';
+let edifFactor = 1.0;
+let cenVisible = false;
+let manzanasEnZona = new Set();
+let drawnPolygon = null;
+let baseAvgPisos = 0;
+
+// ─── COLORES ──────────────────────────────────────────────────────────
+function colorActual(pisos) {
+  if (pisos >= 7) return '#ff3d6b';
+  if (pisos >= 4) return '#ff8c50';
+  if (pisos >= 2) return '#1e5799';
+  return '#1a3a5c';
+}
+
+function colorProspectivo(idx, pisos) {
+  if (!manzanasEnZona.has(idx) && drawnPolygon) return colorActual(pisos);
+  if (edifFactor >= 3) return '#3dff9b';
+  if (edifFactor >= 2) return '#3d9bff';
+  return '#3d9bff';
+}
+
+// ─── RENDER PRINCIPAL ─────────────────────────────────────────────────
+function render() {
+  if (!map || !geojsonData) return;
+
+  geojsonData.features.forEach((f, i) => {
+    const pisos = parseFloat(f.properties.MAX_nro_pi) || 1;
+    const cee = parseFloat(f.properties.Cee) || 0.1;
+    const cen = parseFloat(f.properties.Cen) || 0;
+    const enZona = !drawnPolygon || manzanasEnZona.has(i);
+    const alturaActual = pisos * 3.0;
+
+    if (scenario === 'prospectivo' && enZona) {
+      // Nuevo CEN = CEN actual × factor del slider
+      const nuevoCEN = cen * edifFactor;
+      // Con factor 1.0x = sin cambio (igual que actual)
+      // El crecimiento empieza solo cuando edifFactor > 1.0
+      // Nueva altura = altura actual × edifFactor (simple y claro)
+      f.properties._h = alturaActual * edifFactor;
+      f.properties._nuevoCEN = parseFloat(nuevoCEN.toFixed(2));
+    } else {
+      f.properties._h = alturaActual;
+      f.properties._nuevoCEN = cen;
+    }
+    f.properties._c = scenario === 'prospectivo' ? colorProspectivo(i, pisos) : colorActual(pisos);
+  });
+
+  if (map.getSource('manzanas')) {
+    map.getSource('manzanas').setData(geojsonData);
+  }
+
+  updateStats();
+}
+
+// ─── STATS ────────────────────────────────────────────────────────────
+function updateStats() {
+  if (!geojsonData) return;
+  const fs = geojsonData.features;
+  const pisos = fs.map(f => parseFloat(f.properties.MAX_nro_pi) || 1);
+  const avg = pisos.reduce((a,b) => a+b,0) / pisos.length;
+  const max = Math.max(...pisos);
+  const cee = fs.reduce((a,f) => a + (parseFloat(f.properties.Cee)||0),0) / fs.length;
+
+  document.getElementById('s-manz').textContent = fs.length.toLocaleString();
+  document.getElementById('s-pisos').textContent = avg.toFixed(1);
+  document.getElementById('s-max').textContent = max;
+  document.getElementById('s-cee').textContent = cee.toFixed(1);
+  document.getElementById('s-zona').textContent = manzanasEnZona.size || (drawnPolygon ? 0 : fs.length);
+  document.getElementById('s-factor').textContent = edifFactor.toFixed(1) + 'x';
+
+  updateChart(pisos);
+}
+
+function updateChart(pisos) {
+  if (!chart) return;
+  const b = {'1 piso':0,'2-3 pisos':0,'4-6 pisos':0,'7+ pisos':0};
+  pisos.forEach(p => {
+    if (p>=7) b['7+ pisos']++;
+    else if (p>=4) b['4-6 pisos']++;
+    else if (p>=2) b['2-3 pisos']++;
+    else b['1 piso']++;
+  });
+  chart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    series: [{ type: 'pie', radius: ['38%','68%'], center: ['50%','50%'],
+      data: [
+        {value:b['1 piso'],name:'1 piso',itemStyle:{color:'#1a3a5c'}},
+        {value:b['2-3 pisos'],name:'2-3 pisos',itemStyle:{color:'#1e5799'}},
+        {value:b['4-6 pisos'],name:'4-6 pisos',itemStyle:{color:'#ff8c50'}},
+        {value:b['7+ pisos'],name:'7+ pisos',itemStyle:{color:'#ff3d6b'}}
+      ],
+      label:{show:false}
+    }]
+  });
+}
+
+// ─── ESCENARIO ────────────────────────────────────────────────────────
+function setScenario(s) {
+  scenario = s;
+  ['a','p','t'].forEach(x => {
+    document.getElementById('pa'+(x==='a'?'':x==='p'?'':'')).style.display='none';
+  });
+  document.getElementById('pa').style.display = s==='actual'?'block':'none';
+  document.getElementById('pp').style.display = s==='prospectivo'?'block':'none';
+  document.getElementById('pt').style.display = s==='tendencial'?'block':'none';
+
+  document.getElementById('tab-a').className = 'tab' + (s==='actual'?' act':'');
+  document.getElementById('tab-p').className = 'tab' + (s==='prospectivo'?' pros':'');
+  document.getElementById('tab-t').className = 'tab' + (s==='tendencial'?' tend':'');
+
+  render();
+}
+
+// ─── SLIDER ───────────────────────────────────────────────────────────
+function updateEdif(val) {
+  edifFactor = val / 10;
+  document.getElementById('v-edif').textContent = edifFactor.toFixed(1) + 'x';
+  render();
+}
+
+// ─── DIBUJO ───────────────────────────────────────────────────────────
+function startDraw() {
+  if (!draw) return;
+  draw.deleteAll();
+  drawnPolygon = null;
+  manzanasEnZona = new Set();
+  draw.changeMode('draw_polygon');
+  document.getElementById('draw-hint').style.display = 'block';
+  document.getElementById('btn-draw').classList.add('active');
+}
+
+function clearDraw() {
+  if (!draw) return;
+  draw.deleteAll();
+  drawnPolygon = null;
+  manzanasEnZona = new Set();
+  document.getElementById('draw-hint').style.display = 'none';
+  document.getElementById('btn-draw').classList.remove('active');
+  render();
+}
+
+function calcZona(polygon) {
+  drawnPolygon = polygon;
+  manzanasEnZona = new Set();
+  if (!geojsonData) return;
+  geojsonData.features.forEach((f, i) => {
+    try {
+      const coords = f.geometry.type === 'MultiPolygon'
+        ? f.geometry.coordinates[0][0]
+        : f.geometry.coordinates[0];
+      let cx=0, cy=0;
+      coords.forEach(c => { cx+=c[0]; cy+=c[1]; });
+      cx/=coords.length; cy/=coords.length;
+      if (turf.booleanPointInPolygon(turf.point([cx,cy]), polygon)) {
+        manzanasEnZona.add(i);
+      }
+    } catch(e) {}
+  });
+  render();
+}
+
+// ─── CEN ──────────────────────────────────────────────────────────────
+function toggleCEN() {
+  cenVisible = !cenVisible;
+  const sw = document.getElementById('cen-sw');
+  sw.classList.toggle('on', cenVisible);
+  if (cenVisible) {
+    addCENLayer();
+  } else {
+    if (map.getLayer('cen-layer')) map.removeLayer('cen-layer');
+  }
+}
+
+function addCENLayer() {
+  if (map.getLayer('cen-layer')) map.removeLayer('cen-layer');
+  const cenData = {
+    type: 'FeatureCollection',
+    features: geojsonData.features.map(f => ({
+      ...f,
+      properties: {
+        ...f.properties,
+        _cen_h: (parseFloat(f.properties.Cen) || 0) * 3.0
+      }
+    }))
+  };
+  if (!map.getSource('cen-src')) {
+    map.addSource('cen-src', { type: 'geojson', data: cenData });
+  } else {
+    map.getSource('cen-src').setData(cenData);
+  }
+  map.addLayer({
+    id: 'cen-layer',
+    type: 'fill-extrusion',
+    source: 'cen-src',
+    paint: {
+      'fill-extrusion-color': '#ffffff',
+      'fill-extrusion-height': ['get', '_cen_h'],
+      'fill-extrusion-base': 0,
+      'fill-extrusion-opacity': 0.2
+    }
+  });
+}
+
+// ─── INIT MAP ─────────────────────────────────────────────────────────
+function initMap(geojson) {
+  geojsonData = geojson;
+  baseAvgPisos = geojson.features.reduce((s,f) => s+(parseFloat(f.properties.MAX_nro_pi)||1),0) / geojson.features.length;
+
+  const coords = geojson.features.slice(0,100).map(f => {
+    const c = f.geometry.type === 'MultiPolygon' ? f.geometry.coordinates[0][0][0] : f.geometry.coordinates[0][0];
+    return c;
+  }).filter(Boolean);
+  const avgLng = coords.reduce((s,c)=>s+c[0],0)/coords.length;
+  const avgLat = coords.reduce((s,c)=>s+c[1],0)/coords.length;
+
+  map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/mapbox/dark-v11',
+    center: [avgLng||-77.085, avgLat||-11.865],
+    zoom: 13, pitch: 55, bearing: -15, antialias: true
+  });
+
+  map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
+
+  draw = new MapboxDraw({
+    displayControlsDefault: false,
+    controls: {},
+    styles: [
+      {id:'fill',type:'fill',filter:['all',['==','$type','Polygon'],['!=','mode','static']],paint:{'fill-color':'#3dff9b','fill-opacity':0.1}},
+      {id:'stroke',type:'line',filter:['all',['==','$type','Polygon']],paint:{'line-color':'#3dff9b','line-width':2,'line-dasharray':[4,2]}}
+    ]
+  });
+  map.addControl(draw, 'top-right');
+
+  map.on('load', () => {
+    map.addSource('mapbox-dem', {
+      type: 'raster-dem',
+      url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+      tileSize: 512, maxzoom: 14
+    });
+    map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
+    map.setFog({ color: 'rgb(12,16,28)', 'high-color': 'rgb(25,30,55)', 'horizon-blend': 0.06 });
+
+    // Preparar datos iniciales
+    geojsonData.features.forEach((f, i) => {
+      const pisos = parseFloat(f.properties.MAX_nro_pi) || 1;
+      f.properties._h = pisos * 3.0;
+      f.properties._c = colorActual(pisos);
+    });
+
+    map.addSource('manzanas', { type: 'geojson', data: geojsonData });
+    map.addLayer({
+      id: 'manzanas-fill',
+      type: 'fill-extrusion',
+      source: 'manzanas',
+      paint: {
+        'fill-extrusion-color': ['get', '_c'],
+        'fill-extrusion-height': ['get', '_h'],
+        'fill-extrusion-base': 0,
+        'fill-extrusion-opacity': 0.88,
+        'fill-extrusion-vertical-gradient': true
+      }
+    });
+
+    // Click popup
+    map.on('click', 'manzanas-fill', e => {
+      clickedFeature = e.features[0];
+      const p = e.features[0].properties;
+      new mapboxgl.Popup()
+        .setLngLat(e.lngLat)
+        .setHTML(`<div style="font-family:'DM Sans',sans-serif;padding:4px;min-width:180px">
+          <b style="color:#111;font-size:13px">Manzana</b><br>
+          <table style="font-size:11px;color:#555;margin-top:6px;border-collapse:collapse;width:100%">
+            <tr><td style="padding:2px 8px 2px 0">Pisos</td><td style="color:#111;font-weight:600">${p.MAX_nro_pi||'—'}</td></tr>
+            <tr><td style="padding:2px 8px 2px 0">Altura</td><td style="color:#111;font-weight:600">${((parseFloat(p.MAX_nro_pi)||1)*3).toFixed(0)}m</td></tr>
+            <tr><td style="padding:2px 8px 2px 0">CEE</td><td style="color:#111;font-weight:600">${parseFloat(p.Cee||0).toFixed(2)}</td></tr>
+            <tr><td style="padding:2px 8px 2px 0">CEN</td><td style="color:#111;font-weight:600">${parseFloat(p.Cen||0).toFixed(2)}</td></tr>
+            ${scenario==='prospectivo' ? `<tr><td style="padding:2px 8px 2px 0;color:#3dff9b;font-weight:600">Nuevo CEN</td><td style="color:#3dff9b;font-weight:700">${parseFloat(p._nuevoCEN||p.Cen||0).toFixed(2)}</td></tr>` : ''}
+          </table>
+          <button onclick="abrirCabida()" style="margin-top:10px;width:100%;padding:7px;background:#ff2d9b;color:white;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:0.05em">📐 VER CABIDA</button>
+        </div>`)
+        .addTo(map);
+    });
+    map.on('mouseenter','manzanas-fill',()=>map.getCanvas().style.cursor='pointer');
+    map.on('mouseleave','manzanas-fill',()=>map.getCanvas().style.cursor='');
+
+    // Eventos de dibujo
+    map.on('draw.create', e => {
+      document.getElementById('draw-hint').style.display='none';
+      document.getElementById('btn-draw').classList.remove('active');
+      calcZona(e.features[0]);
+    });
+    map.on('draw.update', e => calcZona(e.features[0]));
+
+    // Init chart
+    chart = echarts.init(document.getElementById('chart'));
+
+    document.getElementById('loading').style.opacity = '0';
+    setTimeout(() => document.getElementById('loading').style.display='none', 500);
+    updateStats();
+  });
+}
+
+// ─── LOAD FILE ────────────────────────────────────────────────────────
+function loadFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!data.features?.length) { alert('GeoJSON sin features.'); return; }
+      initMap(data);
+    } catch(err) { alert('Error: ' + err.message); }
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+document.getElementById('fi').addEventListener('change', e => loadFile(e.target.files[0]));
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => { e.preventDefault(); loadFile(e.dataTransfer.files[0]); });
+</script>
+</body>
+</html>
